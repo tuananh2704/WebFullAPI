@@ -1,60 +1,35 @@
-import type { CSSProperties } from "react";
-import { CalendarDays, Clock3, Play, Star } from "lucide-react";
-import type { Movie } from "../homeData";
+import { ChevronDown } from "lucide-react";
 
-type HeroSectionProps = {
-  movie: Movie;
-  onBook: () => void;
-};
+// Video nền cinematic từ Pexels – phong cách rạp chiếu phim
+const CINEMA_VIDEO =
+  "https://videos.pexels.com/video-files/3209828/3209828-uhd_2560_1440_25fps.mp4";
 
-const HeroSection = ({ movie, onBook }: HeroSectionProps) => {
-  const heroStyle = {
-    "--hero-image": `url(${movie.image})`,
-  } as CSSProperties;
-
+const HeroSection = () => {
   return (
-    <section className="hero" style={heroStyle}>
-      <div className="container hero-content">
-        <span className="age-badge">{movie.age}</span>
-        <h1>{movie.title}</h1>
+    <section className="hero">
+      {/* Video nền – fullscreen, không có text đè lên */}
+      <video
+        className="hero-video-bg"
+        autoPlay
+        loop
+        muted
+        playsInline
+      >
+        <source src={CINEMA_VIDEO} type="video/mp4" />
+      </video>
 
-        <div className="movie-meta">
-          <span className="rating">
-            <Star size={26} fill="currentColor" />
-            {movie.rating}
-          </span>
-          <span>
-            <Clock3 size={24} />
-            {movie.duration}
-          </span>
-          <span>
-            <CalendarDays size={24} />
-            {movie.format || "Phụ đề"}
-          </span>
-        </div>
+      {/* Overlay gradient mờ dần ở dưới */}
+      <div className="hero-video-overlay" />
 
-        <p>{movie.description}</p>
-
-        <div className="hero-actions">
-          <button className="primary-btn" type="button" onClick={onBook}>
-            <Play size={26} />
-            Đặt vé ngay
-          </button>
-          <button
-            className="ghost-btn"
-            type="button"
-            onClick={() => document.getElementById("movies")?.scrollIntoView({ behavior: "smooth" })}
-          >
-            Xem chi tiết
-          </button>
-        </div>
-
-        <div className="slider-dots" aria-label="Hero slides">
-          <span className="active" />
-          <span />
-          <span />
-        </div>
+      {/* Logo / branding nhỏ góc trái (tuỳ chọn, không lấn át) */}
+      <div className="hero-badge">
+        <span className="hero-badge-pill">🎬 Đang chiếu</span>
       </div>
+
+      {/* Chỉ có nút scroll-down ở giữa dưới cùng */}
+      <a className="hero-scroll-hint" href="#movies" aria-label="Cuộn xuống xem phim">
+        <ChevronDown size={32} />
+      </a>
     </section>
   );
 };

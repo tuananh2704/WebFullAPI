@@ -10,35 +10,41 @@ const MovieCard = ({ movie, onChooseMovie }: MovieCardProps) => {
   return (
     <article className="movie-card" onClick={() => onChooseMovie(movie)}>
       <div className="poster-wrap">
-        <img src={movie.image} alt={movie.title} />
+        <img src={movie.image} alt={movie.title} loading="lazy" />
+
+        {/* Age badge */}
         <span className="age-badge small">{movie.age}</span>
+
+        {/* Rating */}
         <span className="card-rating">
-          <Star size={21} fill="currentColor" />
+          <Star size={14} fill="currentColor" />
           {movie.rating}
         </span>
-        {movie.featured && (
+
+        {/* Hover overlay với nút đặt vé */}
+        <div className="poster-hover">
           <button
-            className="quick-book"
+            className="book-now-btn"
             type="button"
-            onClick={(event) => {
-              event.stopPropagation();
+            onClick={(e) => {
+              e.stopPropagation();
               onChooseMovie(movie);
             }}
           >
-            <Play size={22} />
-            Đặt vé
+            <Play size={18} fill="currentColor" />
+            Đặt vé ngay
           </button>
-        )}
+        </div>
       </div>
 
       <div className="movie-info">
-        <h3>{movie.title}</h3>
+        <h3 title={movie.title}>{movie.title}</h3>
         <span className="duration">
-          <Clock3 size={20} />
+          <Clock3 size={14} />
           {movie.duration}
         </span>
         <div className="genre-list">
-          {movie.genres.map((genre) => (
+          {movie.genres.slice(0, 2).map((genre) => (
             <span key={genre}>{genre}</span>
           ))}
         </div>

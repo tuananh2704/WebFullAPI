@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getMovies } from "../../services/movieService";
 import { getShowtimesByMovie } from "../../services/showtimeService";
 import type { ApiMovie, ApiShowtime } from "../../types/api";
@@ -6,7 +6,7 @@ import BookingSection from "./components/BookingSection";
 import DealsSection from "./components/DealsSection";
 import HeroSection from "./components/HeroSection";
 import MoviesSection from "./components/MoviesSection";
-import { fallbackMovies, heroMovie, posterFallbacks } from "./homeData";
+import { fallbackMovies, posterFallbacks } from "./homeData";
 import type { Movie } from "./homeData";
 
 const isFullUrl = (url: string) => /^https?:\/\//i.test(url);
@@ -22,7 +22,7 @@ const mapApiMovieToMovie = (movie: ApiMovie, index: number): Movie => ({
     movie.poster_url && isFullUrl(movie.poster_url)
       ? movie.poster_url
       : posterFallbacks[index % posterFallbacks.length],
-  description: movie.description || heroMovie.description,
+  description: movie.description || "",
   format: movie.language || "Phụ đề",
   featured: index === 2,
 });
@@ -59,16 +59,6 @@ const Home = () => {
     fetchMovies();
   }, []);
 
-  const activeHeroMovie = useMemo(() => {
-    return movies[0]
-      ? {
-          ...heroMovie,
-          ...movies[0],
-          duration: movies[0].duration.replace("min", " phút"),
-        }
-      : heroMovie;
-  }, [movies]);
-
   const handleChooseMovie = async (movie: Movie) => {
     setSelectedMovie(movie);
     setShowtimes([]);
@@ -100,13 +90,17 @@ const Home = () => {
 
   return (
     <>
-      <HeroSection movie={activeHeroMovie} onBook={() => handleChooseMovie(activeHeroMovie)} />
+      {/* Video hero thuần – không có text */}
+      <HeroSection />
+
+      {/* Danh sách phim – hiện ra ngay bên dưới video */}
       <MoviesSection
-        movies={movies.slice(0, 3)}
+        movies={movies}
         isLoading={isLoadingMovies}
         errorMessage={movieError}
         onChooseMovie={handleChooseMovie}
       />
+
       <div ref={bookingRef}>
         <BookingSection
           selectedMovie={selectedMovie}
