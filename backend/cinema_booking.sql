@@ -884,3 +884,31 @@ WHERE m.id = 1
   AND s.status = 'OPEN'
 ORDER BY s.show_date, s.start_time
 LIMIT 10;
+
+-- =====================================================
+-- PENDING USERS (ĐĂNG KÝ TẠM + OTP)
+-- =====================================================
+
+CREATE TABLE pending_users (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+
+    full_name VARCHAR(100),
+    email VARCHAR(100) UNIQUE NOT NULL,
+    phone VARCHAR(20),
+    password_hash VARCHAR(255) NOT NULL,
+
+    verification_code CHAR(6) NOT NULL,
+
+    status ENUM('PENDING','VERIFIED','EXPIRED')
+    DEFAULT 'PENDING',
+
+    expires_at DATETIME NOT NULL,
+
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_pending_email
+ON pending_users(email);
+
+CREATE INDEX idx_pending_code
+ON pending_users(verification_code);
