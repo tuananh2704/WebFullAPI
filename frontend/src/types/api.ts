@@ -8,9 +8,11 @@ export type ApiMovie = {
   id: number;
   title: string;
   description: string | null;
+  director: string | null;
   duration: number | null;
   release_date: string | null;
   poster_url: string | null;
+  trailer_url: string | null;
   language: string | null;
   rating: string | number | null;
   status: "COMING_SOON" | "NOW_SHOWING" | "ENDED";
@@ -34,10 +36,12 @@ export type ApiShowtime = {
   room_id: number;
   room_name: string;
   room_type: string;
+  cinema_id?: number;
   cinema_name: string;
   start_time: string;
   end_time: string;
   status: "OPEN" | "FULL" | "CANCELLED";
+  show_date?: string;
 };
 
 export type ApiSeat = {
@@ -85,4 +89,31 @@ export type ApiUser = {
   phone: string | null;
   status: string;
   roles: string[];
+};
+
+export type ApiCinema = {
+  id: number;
+  name: string;
+  brand: "CGV" | "LOTTE" | "GALAXY" | "BHD" | "CINESTAR";
+  city: string;
+  address: string;
+  phone: string;
+  logo_url: string | null;
+  status: string;
+  rooms?: ApiRoom[];
+};
+
+export type ApiRoom = {
+  id: number;
+  cinema_id: number;
+  name: string;
+  room_type: "2D" | "3D" | "IMAX" | "4DX";
+  total_seats: number;
+  status: "ACTIVE" | "MAINTENANCE";
+};
+
+export type ShowtimeByDate = {
+  date: string;        // 'YYYY-MM-DD'
+  day_label: string;   // 'T2 - 20/05'
+  showtimes: ApiShowtime[];
 };

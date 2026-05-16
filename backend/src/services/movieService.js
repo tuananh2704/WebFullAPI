@@ -3,8 +3,8 @@ const AppError = require("../utils/AppError");
 
 const movieSelect = `
   SELECT
-    m.id, m.title, m.description, m.duration, m.release_date, m.poster_url,
-    m.language, m.rating, m.status,
+    m.id, m.title, m.description, m.director, m.duration, m.release_date, m.poster_url,
+    m.trailer_url, m.language, m.rating, m.status,
     COALESCE(JSON_ARRAYAGG(g.name), JSON_ARRAY()) AS genres
   FROM movies m
   LEFT JOIN movie_genres mg ON mg.movie_id = m.id
@@ -16,7 +16,27 @@ const normalizeMovie = (movie) => ({
   genres: typeof movie.genres === "string" ? JSON.parse(movie.genres).filter(Boolean) : movie.genres,
 });
 
-const getMovies = async ({ page, limit, search, genre, status }) => {
+const VALID_SORT = {
+  rating_desc: "m.rating DESC, m.id DESC",
+  release_desc: "m.release_date DESC, m.id DESC",
+  title_asc: "m.title ASC",
+};
+
+const getMovies = async ({
+  page,
+  limit,
+  search,
+  genre,
+  status,
+  director,
+  language,
+  duration_min,
+  duration_max,
+  rating_min,
+  release_from,
+  release_to,
+  sort,
+}) => {
   const safeLimit = Number(limit);
   const offset = (Number(page) - 1) * safeLimit;
   const where = [];
@@ -28,7 +48,9 @@ const getMovies = async ({ page, limit, search, genre, status }) => {
   }
 
   if (genre) {
-    where.push("m.id IN (SELECT movie_id FROM movie_genres mg2 JOIN genres g2 ON g2.id = mg2.genre_id WHERE g2.name = ?)");
+    where.push(
+      "m.id IN (SELECT movie_id FROM movie_genres mg2 JOIN genres g2 ON g2.id = mg2.genre_id WHERE g2.name = ?)"
+    );
     params.push(genre);
   }
 
@@ -37,7 +59,43 @@ const getMovies = async ({ page, limit, search, genre, status }) => {
     params.push(status);
   }
 
+  if (director) {
+    where.push("m.director LIKE ?");
+    params.push(`%${director}%`);
+  }
+
+  if (language) {
+    where.push("m.language = ?");
+    params.push(language);
+  }
+
+  if (duration_min) {
+    where.push("m.duration >= ?");
+    params.push(Number(duration_min));
+  }
+
+  if (duration_max) {
+    where.push("m.duration <= ?");
+    params.push(Number(duration_max));
+  }
+
+  if (rating_min) {
+    where.push("m.rating >= ?");
+    params.push(Number(rating_min));
+  }
+
+  if (release_from) {
+    where.push("m.release_date >= ?");
+    params.push(release_from);
+  }
+
+  if (release_to) {
+    where.push("m.release_date <= ?");
+    params.push(release_to);
+  }
+
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const orderSql = VALID_SORT[sort] || "m.release_date DESC, m.id DESC";
 
   const [countRows] = await pool.execute(
     `
@@ -55,7 +113,7 @@ const getMovies = async ({ page, limit, search, genre, status }) => {
     ${movieSelect}
     ${whereSql}
     GROUP BY m.id
-    ORDER BY m.release_date DESC, m.id DESC
+    ORDER BY ${orderSql}
     LIMIT ${safeLimit} OFFSET ${offset}
     `,
     params
@@ -67,7 +125,7 @@ const getMovies = async ({ page, limit, search, genre, status }) => {
       page,
       limit: safeLimit,
       total: countRows[0].total,
-      totalPages: Math.ceil(countRows[0].total / limit),
+      totalPages: Math.ceil(countRows[0].total / safeLimit),
     },
   };
 };
@@ -92,15 +150,17 @@ const getMovieById = async (movieId) => {
 const createMovie = async (movie) => {
   const [result] = await pool.execute(
     `
-    INSERT INTO movies(title, description, duration, release_date, poster_url, language, rating, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO movies(title, description, director, duration, release_date, poster_url, trailer_url, language, rating, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       movie.title,
       movie.description || null,
+      movie.director || null,
       movie.duration || null,
       movie.release_date || null,
       movie.poster_url || null,
+      movie.trailer_url || null,
       movie.language || null,
       movie.rating || null,
       movie.status || "NOW_SHOWING",
@@ -118,9 +178,11 @@ const updateMovie = async (movieId, movie) => {
     UPDATE movies
     SET title = COALESCE(?, title),
         description = COALESCE(?, description),
+        director = COALESCE(?, director),
         duration = COALESCE(?, duration),
         release_date = COALESCE(?, release_date),
         poster_url = COALESCE(?, poster_url),
+        trailer_url = COALESCE(?, trailer_url),
         language = COALESCE(?, language),
         rating = COALESCE(?, rating),
         status = COALESCE(?, status)
@@ -129,9 +191,11 @@ const updateMovie = async (movieId, movie) => {
     [
       movie.title || null,
       movie.description || null,
+      movie.director || null,
       movie.duration || null,
       movie.release_date || null,
       movie.poster_url || null,
+      movie.trailer_url || null,
       movie.language || null,
       movie.rating || null,
       movie.status || null,

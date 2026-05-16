@@ -20,6 +20,7 @@ export const login = async (payload: LoginPayload) => {
   );
 
   localStorage.setItem("accessToken", response.data.data.token);
+  localStorage.setItem("currentUser", JSON.stringify(response.data.data.user));
   return response.data.data;
 };
 
@@ -30,6 +31,7 @@ export const register = async (payload: RegisterPayload) => {
   );
 
   localStorage.setItem("accessToken", response.data.data.token);
+  localStorage.setItem("currentUser", JSON.stringify(response.data.data.user));
   return response.data.data;
 };
 
@@ -40,4 +42,18 @@ export const getProfile = async () => {
 
 export const logout = () => {
   localStorage.removeItem("accessToken");
+  localStorage.removeItem("currentUser");
+};
+
+export const getCurrentUser = (): ApiUser | null => {
+  try {
+    const data = localStorage.getItem("currentUser");
+    return data ? JSON.parse(data) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const isLoggedIn = (): boolean => {
+  return Boolean(localStorage.getItem("accessToken"));
 };

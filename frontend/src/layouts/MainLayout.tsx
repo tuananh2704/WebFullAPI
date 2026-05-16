@@ -1,7 +1,31 @@
-import { Film, Search, UserRound } from "lucide-react";
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Film, LogOut, Search, UserRound } from "lucide-react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { getCurrentUser, logout } from "../services/authService";
+import type { ApiUser } from "../types/api";
 
 const MainLayout = () => {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<ApiUser | null>(getCurrentUser());
+
+  // Listen for storage changes (login/logout from other tabs or same-page updates)
+  useEffect(() => {
+    const sync = () => setUser(getCurrentUser());
+    window.addEventListener("storage", sync);
+    // Also poll every second to catch same-tab changes (login on AuthPage)
+    const interval = setInterval(sync, 1000);
+    return () => {
+      window.removeEventListener("storage", sync);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const handleLogout = () => {
+    logout();
+    setUser(null);
+    navigate("/");
+  };
+
   return (
     <div className="cinemax-shell">
       <header className="site-header">
@@ -16,17 +40,36 @@ const MainLayout = () => {
           <nav className="main-nav" aria-label="Main navigation">
             <NavLink to="/">Trang chủ</NavLink>
             <NavLink to="/movies">Phim</NavLink>
+            <NavLink to="/cinemas">Rạp</NavLink>
             <NavLink to="/bookings">Booking</NavLink>
-            <NavLink to="/admin">Admin</NavLink>
           </nav>
 
           <div className="header-actions">
             <NavLink className="icon-link" to="/movies" aria-label="Search">
               <Search size={26} />
             </NavLink>
-            <NavLink className="icon-link" to="/profile" aria-label="Account">
-              <UserRound size={26} />
-            </NavLink>
+
+            {user ? (
+              <>
+                <NavLink className="user-name-link" to="/profile" title={user.email}>
+                  <UserRound size={18} />
+                  <span className="user-display-name">{user.full_name}</span>
+                </NavLink>
+                <button
+                  className="logout-btn"
+                  onClick={handleLogout}
+                  title="Đăng xuất"
+                  aria-label="Đăng xuất"
+                >
+                  <LogOut size={20} />
+                </button>
+              </>
+            ) : (
+              <NavLink className="login-link" to="/auth" aria-label="Đăng nhập">
+                <UserRound size={18} />
+                <span>Đăng nhập</span>
+              </NavLink>
+            )}
           </div>
         </div>
       </header>

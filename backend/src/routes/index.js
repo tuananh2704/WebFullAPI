@@ -8,6 +8,7 @@ const paymentRoutes = require("./paymentRoutes");
 const foodRoutes = require("./foodRoutes");
 const promotionRoutes = require("./promotionRoutes");
 const adminRoutes = require("./adminRoutes");
+const cinemaRoutes = require("./cinemaRoutes");
 const { successResponse } = require("../utils/apiResponse");
 
 const router = express.Router();
@@ -27,11 +28,26 @@ router.get("/docs", (req, res) => {
     ],
     movies: [
       "GET /api/movies?page=1&limit=10",
-      "GET /api/movies/search?search=avengers",
-      "GET /api/movies?genre=Action",
+      "GET /api/movies?search=avengers&genre=Action&status=NOW_SHOWING",
+      "GET /api/movies?director=nolan&language=English",
+      "GET /api/movies?duration_min=90&duration_max=180",
+      "GET /api/movies?rating_min=8&release_from=2023-01-01&release_to=2024-12-31",
+      "GET /api/movies?sort=rating_desc",
       "GET /api/movies/:id",
     ],
-    showtimes: ["GET /api/showtimes/movie/:movieId"],
+    cinemas: [
+      "GET /api/cinemas",
+      "GET /api/cinemas?city=Ha Noi&brand=CGV",
+      "GET /api/cinemas/:id",
+      "GET /api/cinemas/:id/rooms",
+      "GET /api/cinemas/:id/showtimes",
+      "GET /api/cinemas/:id/showtimes?movie_id=1&date=2026-05-20",
+      "GET /api/cinemas/:id/showtimes?week=0",
+    ],
+    showtimes: [
+      "GET /api/showtimes/movie/:movieId",
+      "GET /api/showtimes?movie_id=1&status=OPEN",
+    ],
     seats: ["GET /api/seats/showtime/:showtimeId", "GET /api/seats/room/:roomId"],
     bookings: [
       "POST /api/bookings",
@@ -65,5 +81,6 @@ router.use("/payments", paymentRoutes);
 router.use("/foods", foodRoutes);
 router.use("/promotions", promotionRoutes);
 router.use("/admin", adminRoutes);
+router.use("/cinemas", cinemaRoutes);
 
 module.exports = router;
