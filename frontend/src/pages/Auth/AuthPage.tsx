@@ -1,6 +1,6 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login, register } from "../../services/authService";
+import { login, register, verifyRegister } from "../../services/authService";
 
 const DEMO_ACCOUNTS = [
   { email: "a@gmail.com", name: "Nguyen Van A" },
@@ -33,6 +33,39 @@ const AuthPage = () => {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [otpStep, setOtpStep] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [pendingEmail, setPendingEmail] = useState("");
+  const [countdown, setCountdown] = useState(0);
+
+  useEffect(() => {
+    if (!otpStep || countdown <= 0) return;
+
+    const timer = window.setInterval(() => {
+      setCountdown((seconds) => Math.max(seconds - 1, 0));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [otpStep, countdown]);
+
+  useEffect(() => {
+    if (otpStep && countdown === 0) {
+      setMessage("Mã OTP đã hết hạn. Vui lòng đăng ký lại.");
+    }
+  }, [otpStep, countdown]);
+
+  const resetOtpStep = () => {
+    setOtpStep(false);
+    setOtp("");
+    setPendingEmail("");
+    setCountdown(0);
+  };
+
+  const formatCountdown = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(remainingSeconds).padStart(2, "0")}`;
+  };
 
   const validate = (): boolean => {
     const errs: Record<string, string> = {};
@@ -65,16 +98,49 @@ const AuthPage = () => {
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setMessage("");
+
+    if (otpStep) {
+      if (!otp.trim()) {
+        setErrors({ verification_code: "Vui lòng nhập mã OTP" });
+        return;
+      }
+      if (!/^\d{6}$/.test(otp.trim())) {
+        setErrors({ verification_code: "Mã OTP phải gồm 6 chữ số" });
+        return;
+      }
+      if (countdown <= 0) {
+        setMessage("Mã OTP đã hết hạn. Vui lòng đăng ký lại.");
+        return;
+      }
+
+      setLoading(true);
+      try {
+        await verifyRegister({ email: pendingEmail, verification_code: otp.trim() });
+        navigate("/");
+      } catch (error: any) {
+        setMessage(error.response?.data?.message || "Không xác minh được mã OTP.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!validate()) return;
 
     setLoading(true);
     try {
       if (mode === "login") {
         await login({ email: form.email, password: form.password });
+        navigate("/");
       } else {
-        await register(form);
+        const data = await register(form);
+        setPendingEmail(data.email);
+        setCountdown(data.expires_in_seconds || 300);
+        setOtpStep(true);
+        setOtp("");
+        setErrors({});
+        setMessage("Mã OTP đã được gửi tới email của bạn. Vui lòng nhập mã trong 5 phút.");
       }
-      navigate("/");
     } catch (error: any) {
       setMessage(error.response?.data?.message || "Không xử lý được yêu cầu.");
     } finally {
@@ -92,22 +158,23 @@ const AuthPage = () => {
     <section className="app-page">
       <div className="container">
         <div className="auth-layout">
-          {/* Left panel */}
           <div className="auth-info-panel">
             <p className="eyebrow">Account</p>
             <h1 style={{ marginBottom: 16 }}>
-              {mode === "login" ? "Đăng nhập" : "Đăng ký tài khoản"}
+              {otpStep ? "Xác minh OTP" : mode === "login" ? "Đăng nhập" : "Đăng ký tài khoản"}
             </h1>
             <p className="muted" style={{ marginBottom: 28, lineHeight: 1.6 }}>
-              {mode === "login"
-                ? "Đăng nhập để đặt vé xem phim tại CINEMAX. Chọn tài khoản demo bên dưới hoặc nhập thông tin của bạn."
-                : "Tạo tài khoản mới để trải nghiệm đặt vé trực tuyến."}
+              {otpStep
+                ? `Nhập mã OTP cho ${pendingEmail}. Mã sẽ hết hạn sau 5 phút.`
+                : mode === "login"
+                  ? "Đăng nhập để đặt vé xem phim tại CINEMAX. Chọn tài khoản demo bên dưới hoặc nhập thông tin của bạn."
+                  : "Tạo tài khoản mới để trải nghiệm đặt vé trực tuyến."}
             </p>
 
-            {mode === "login" && (
+            {mode === "login" && !otpStep && (
               <div className="demo-accounts">
                 <h3 style={{ marginBottom: 12, fontSize: 15, color: "#ccc" }}>
-                  📋 Tài khoản demo (mật khẩu: 123456)
+                  Tài khoản demo (mật khẩu: 123456)
                 </h3>
                 <div className="demo-account-grid">
                   {DEMO_ACCOUNTS.slice(0, 10).map((acc) => (
@@ -117,9 +184,7 @@ const AuthPage = () => {
                       onClick={() => handleQuickLogin(acc.email)}
                       type="button"
                     >
-                      <span className="demo-avatar">
-                        {acc.name.charAt(0)}
-                      </span>
+                      <span className="demo-avatar">{acc.name.charAt(0)}</span>
                       <div>
                         <span className="demo-name">{acc.name}</span>
                         <span className="demo-email">{acc.email}</span>
@@ -131,89 +196,150 @@ const AuthPage = () => {
             )}
           </div>
 
-          {/* Right panel - Form */}
           <div className="auth-form-panel">
             <div className="segmented" style={{ marginBottom: 20 }}>
               <button
                 type="button"
                 className={mode === "login" ? "active" : ""}
-                onClick={() => { setMode("login"); setErrors({}); setMessage(""); }}
+                onClick={() => {
+                  setMode("login");
+                  setErrors({});
+                  setMessage("");
+                  resetOtpStep();
+                }}
               >
                 Đăng nhập
               </button>
               <button
                 type="button"
                 className={mode === "register" ? "active" : ""}
-                onClick={() => { setMode("register"); setErrors({}); setMessage(""); }}
+                onClick={() => {
+                  setMode("register");
+                  setErrors({});
+                  setMessage("");
+                  resetOtpStep();
+                }}
               >
                 Đăng ký
               </button>
             </div>
 
             <form className="stack" onSubmit={handleSubmit} noValidate>
-              {mode === "register" && (
+              {otpStep ? (
                 <>
-                  <div className="form-field">
-                    <label htmlFor="full_name">Họ tên *</label>
-                    <input
-                      id="full_name"
-                      placeholder="Nguyễn Văn A"
-                      value={form.full_name}
-                      onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                      className={errors.full_name ? "input-error" : ""}
-                    />
-                    {errors.full_name && <span className="field-error">{errors.full_name}</span>}
+                  <div className="otp-status">
+                    <span>Thời gian còn lại</span>
+                    <strong>{formatCountdown(countdown)}</strong>
                   </div>
                   <div className="form-field">
-                    <label htmlFor="phone">Số điện thoại</label>
+                    <label htmlFor="verification_code">Mã OTP *</label>
                     <input
-                      id="phone"
-                      placeholder="0901234567"
-                      value={form.phone}
-                      onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                      className={errors.phone ? "input-error" : ""}
+                      id="verification_code"
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="Nhập 6 chữ số"
+                      value={otp}
+                      onChange={(e) => {
+                        setOtp(e.target.value.replace(/\D/g, "").slice(0, 6));
+                        setErrors({});
+                      }}
+                      className={errors.verification_code ? "input-error" : ""}
                     />
-                    {errors.phone && <span className="field-error">{errors.phone}</span>}
+                    {errors.verification_code && (
+                      <span className="field-error">{errors.verification_code}</span>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  {mode === "register" && (
+                    <>
+                      <div className="form-field">
+                        <label htmlFor="full_name">Họ tên *</label>
+                        <input
+                          id="full_name"
+                          placeholder="Nguyễn Văn A"
+                          value={form.full_name}
+                          onChange={(e) => setForm({ ...form, full_name: e.target.value })}
+                          className={errors.full_name ? "input-error" : ""}
+                        />
+                        {errors.full_name && (
+                          <span className="field-error">{errors.full_name}</span>
+                        )}
+                      </div>
+                      <div className="form-field">
+                        <label htmlFor="phone">Số điện thoại</label>
+                        <input
+                          id="phone"
+                          placeholder="0901234567"
+                          value={form.phone}
+                          onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                          className={errors.phone ? "input-error" : ""}
+                        />
+                        {errors.phone && <span className="field-error">{errors.phone}</span>}
+                      </div>
+                    </>
+                  )}
+
+                  <div className="form-field">
+                    <label htmlFor="email">Email *</label>
+                    <input
+                      id="email"
+                      type="email"
+                      placeholder="email@gmail.com"
+                      value={form.email}
+                      onChange={(e) => setForm({ ...form, email: e.target.value })}
+                      className={errors.email ? "input-error" : ""}
+                    />
+                    {errors.email && <span className="field-error">{errors.email}</span>}
+                  </div>
+
+                  <div className="form-field">
+                    <label htmlFor="password">Mật khẩu *</label>
+                    <input
+                      id="password"
+                      type="password"
+                      placeholder="Nhập mật khẩu"
+                      value={form.password}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      className={errors.password ? "input-error" : ""}
+                    />
+                    {errors.password && <span className="field-error">{errors.password}</span>}
                   </div>
                 </>
               )}
-
-              <div className="form-field">
-                <label htmlFor="email">Email *</label>
-                <input
-                  id="email"
-                  type="email"
-                  placeholder="email@gmail.com"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  className={errors.email ? "input-error" : ""}
-                />
-                {errors.email && <span className="field-error">{errors.email}</span>}
-              </div>
-
-              <div className="form-field">
-                <label htmlFor="password">Mật khẩu *</label>
-                <input
-                  id="password"
-                  type="password"
-                  placeholder="Nhập mật khẩu"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  className={errors.password ? "input-error" : ""}
-                />
-                {errors.password && <span className="field-error">{errors.password}</span>}
-              </div>
 
               {message && <p className="section-state warning">{message}</p>}
 
               <button
                 className="primary-btn form-submit"
                 type="submit"
-                disabled={loading}
-                style={{ opacity: loading ? 0.7 : 1 }}
+                disabled={loading || (otpStep && countdown <= 0)}
+                style={{ opacity: loading || (otpStep && countdown <= 0) ? 0.7 : 1 }}
               >
-                {loading ? "Đang xử lý..." : mode === "login" ? "🔐 Đăng nhập" : "✨ Tạo tài khoản"}
+                {loading
+                  ? "Đang xử lý..."
+                  : otpStep
+                    ? "Xác minh OTP"
+                    : mode === "login"
+                      ? "Đăng nhập"
+                      : "Tạo tài khoản"}
               </button>
+
+              {otpStep && (
+                <button
+                  className="secondary-btn form-submit"
+                  type="button"
+                  onClick={() => {
+                    setMode("register");
+                    setErrors({});
+                    setMessage("");
+                    resetOtpStep();
+                  }}
+                >
+                  Đăng ký lại
+                </button>
+              )}
             </form>
           </div>
         </div>

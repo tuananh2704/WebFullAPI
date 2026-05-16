@@ -6,6 +6,12 @@ const { requireFields } = require("../utils/validators");
 const register = asyncHandler(async (req, res) => {
   requireFields(req.body, ["full_name", "email", "password"]);
   const data = await authService.register(req.body);
+  return successResponse(res, "OTP created successfully", data, 201);
+});
+
+const verifyRegister = asyncHandler(async (req, res) => {
+  requireFields(req.body, ["email", "verification_code"]);
+  const data = await authService.verifyRegister(req.body);
   return successResponse(res, "Register successfully", data, 201);
 });
 
@@ -22,6 +28,7 @@ const profile = asyncHandler(async (req, res) => {
 
 module.exports = {
   register,
+  verifyRegister,
   login,
   profile,
 };

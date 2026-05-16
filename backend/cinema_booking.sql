@@ -549,6 +549,17 @@ CREATE TABLE users (
     status        ENUM('ACTIVE','BLOCKED') DEFAULT 'ACTIVE'
 );
 
+CREATE TABLE pending_users (
+    id                BIGINT PRIMARY KEY AUTO_INCREMENT,
+    full_name         VARCHAR(100) NOT NULL,
+    email             VARCHAR(100) NOT NULL UNIQUE,
+    phone             VARCHAR(20),
+    password_hash     VARCHAR(255) NOT NULL,
+    verification_code VARCHAR(6) NOT NULL,
+    expires_at        DATETIME NOT NULL,
+    created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 INSERT INTO users(full_name, email, phone, password_hash, status) VALUES
 ('Nguyen Van A',    'a@gmail.com',        '0901111111', '123456',      'ACTIVE'),
 ('Tran Thi B',      'b@gmail.com',        '0902222222', '123456',      'ACTIVE'),

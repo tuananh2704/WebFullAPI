@@ -23,6 +23,7 @@ router.get("/docs", (req, res) => {
   return successResponse(res, "Sample API endpoints", {
     auth: [
       "POST /api/auth/register",
+      "POST /api/auth/verify-register",
       "POST /api/auth/login",
       "GET /api/auth/profile",
     ],

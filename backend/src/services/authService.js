@@ -2,6 +2,11 @@ const bcrypt = require("bcrypt");
 const pool = require("../configs/db");
 const AppError = require("../utils/AppError");
 const { signToken } = require("../utils/jwt");
+const { sendVerificationEmail } = require("./emailService");
+
+const OTP_TTL_SECONDS = 5 * 60;
+
+let pendingUsersTableReady = false;
 
 const publicUserFields = `
   u.id, u.full_name, u.email, u.phone, u.status,
@@ -49,32 +54,148 @@ const findUserById = async (userId) => {
   return rows[0] ? normalizeUser(rows[0]) : null;
 };
 
+const ensurePendingUsersTable = async () => {
+  if (pendingUsersTableReady) return;
+
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS pending_users (
+      id BIGINT PRIMARY KEY AUTO_INCREMENT,
+      full_name VARCHAR(100) NOT NULL,
+      email VARCHAR(100) NOT NULL UNIQUE,
+      phone VARCHAR(20),
+      password_hash VARCHAR(255) NOT NULL,
+      verification_code VARCHAR(6) NOT NULL,
+      expires_at DATETIME NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  pendingUsersTableReady = true;
+};
+
+const cleanupExpiredPendingUsers = async (connection = pool) => {
+  await ensurePendingUsersTable();
+  await connection.execute("DELETE FROM pending_users WHERE expires_at <= NOW()");
+};
+
+const generateVerificationCode = () => {
+  return String(Math.floor(100000 + Math.random() * 900000));
+};
+
+const schedulePendingUserDeletion = (email, verificationCode) => {
+  setTimeout(() => {
+    cleanupExpiredPendingUsers()
+      .then(() =>
+        pool.execute(
+          "DELETE FROM pending_users WHERE email = ? AND verification_code = ? AND expires_at <= NOW()",
+          [email, verificationCode]
+        )
+      )
+      .catch((error) => {
+        if (process.env.NODE_ENV !== "production") {
+          console.error("Failed to delete expired pending user", error);
+        }
+      });
+  }, OTP_TTL_SECONDS * 1000).unref();
+};
+
 const register = async ({ full_name, email, phone, password }) => {
+  await cleanupExpiredPendingUsers();
+
   const existingUser = await findUserByEmail(email);
   if (existingUser) {
     throw new AppError("Email already exists", 409);
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  // Transaction keeps user creation and role assignment consistent.
+  const verificationCode = generateVerificationCode();
+
+  await pool.execute(
+    `
+    INSERT INTO pending_users(
+      full_name, email, phone, password_hash, verification_code, expires_at
+    )
+    VALUES (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))
+    ON DUPLICATE KEY UPDATE
+      full_name = VALUES(full_name),
+      phone = VALUES(phone),
+      password_hash = VALUES(password_hash),
+      verification_code = VALUES(verification_code),
+      expires_at = VALUES(expires_at),
+      created_at = CURRENT_TIMESTAMP
+    `,
+    [full_name, email, phone || null, passwordHash, verificationCode, OTP_TTL_SECONDS]
+  );
+
+  try {
+    await sendVerificationEmail({ to: email, fullName: full_name, verificationCode });
+  } catch (error) {
+    await pool.execute("DELETE FROM pending_users WHERE email = ?", [email]);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to send verification email", error);
+    }
+    throw new AppError("Không gửi được email OTP. Vui lòng kiểm tra cấu hình SMTP.", 500);
+  }
+
+  schedulePendingUserDeletion(email, verificationCode);
+
+  return {
+    email,
+    expires_in_seconds: OTP_TTL_SECONDS,
+  };
+};
+
+const verifyRegister = async ({ email, verification_code }) => {
+  await cleanupExpiredPendingUsers();
+
   const connection = await pool.getConnection();
 
   try {
     await connection.beginTransaction();
+
+    const [pendingRows] = await connection.execute(
+      `
+      SELECT * FROM pending_users
+      WHERE email = ? AND verification_code = ? AND expires_at > NOW()
+      LIMIT 1
+      `,
+      [email, verification_code]
+    );
+
+    const pendingUser = pendingRows[0];
+    if (!pendingUser) {
+      await connection.execute("DELETE FROM pending_users WHERE email = ? AND expires_at <= NOW()", [
+        email,
+      ]);
+      throw new AppError("OTP is invalid or expired", 400);
+    }
+
+    const [existingRows] = await connection.execute("SELECT id FROM users WHERE email = ? LIMIT 1", [
+      email,
+    ]);
+    if (existingRows[0]) {
+      await connection.execute("DELETE FROM pending_users WHERE email = ?", [email]);
+      throw new AppError("Email already exists", 409);
+    }
 
     const [result] = await connection.execute(
       `
       INSERT INTO users(full_name, email, phone, password_hash, status)
       VALUES (?, ?, ?, ?, 'ACTIVE')
       `,
-      [full_name, email, phone || null, passwordHash]
+      [pendingUser.full_name, pendingUser.email, pendingUser.phone, pendingUser.password_hash]
     );
 
     const [roles] = await connection.execute("SELECT id FROM roles WHERE name = 'CUSTOMER' LIMIT 1");
+    if (!roles[0]) {
+      throw new AppError("Customer role is not configured", 500);
+    }
+
     await connection.execute("INSERT INTO user_roles(user_id, role_id) VALUES (?, ?)", [
       result.insertId,
       roles[0].id,
     ]);
+    await connection.execute("DELETE FROM pending_users WHERE id = ?", [pendingUser.id]);
 
     await connection.commit();
     const user = await findUserById(result.insertId);
@@ -88,6 +209,14 @@ const register = async ({ full_name, email, phone, password }) => {
     connection.release();
   }
 };
+
+setInterval(() => {
+  cleanupExpiredPendingUsers().catch((error) => {
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to cleanup expired pending users", error);
+    }
+  });
+}, 60 * 1000).unref();
 
 const login = async ({ email, password }) => {
   const user = await findUserByEmail(email);
@@ -119,6 +248,7 @@ const login = async ({ email, password }) => {
 
 module.exports = {
   register,
+  verifyRegister,
   login,
   findUserById,
 };

@@ -563,6 +563,44 @@ select {
   font-size: 18px;
 }
 
+.secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: #2d2d2d;
+  color: #fff;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+.secondary-btn:hover {
+  background: #3a3a3a;
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.otp-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 8px;
+  background: #242424;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #ccc;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.otp-status strong {
+  color: var(--yellow);
+  font-size: 24px;
+  letter-spacing: 0;
+}
+
 .compact {
   width: fit-content;
   min-height: 48px;

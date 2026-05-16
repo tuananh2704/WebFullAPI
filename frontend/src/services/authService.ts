@@ -13,6 +13,16 @@ type RegisterPayload = {
   password: string;
 };
 
+type RegisterOtpResponse = {
+  email: string;
+  expires_in_seconds: number;
+};
+
+type VerifyRegisterPayload = {
+  email: string;
+  verification_code: string;
+};
+
 export const login = async (payload: LoginPayload) => {
   const response = await apiClient.post<ApiResponse<{ token: string; user: ApiUser }>>(
     "/auth/login",
@@ -25,8 +35,17 @@ export const login = async (payload: LoginPayload) => {
 };
 
 export const register = async (payload: RegisterPayload) => {
-  const response = await apiClient.post<ApiResponse<{ token: string; user: ApiUser }>>(
+  const response = await apiClient.post<ApiResponse<RegisterOtpResponse>>(
     "/auth/register",
+    payload
+  );
+
+  return response.data.data;
+};
+
+export const verifyRegister = async (payload: VerifyRegisterPayload) => {
+  const response = await apiClient.post<ApiResponse<{ token: string; user: ApiUser }>>(
+    "/auth/verify-register",
     payload
   );
 

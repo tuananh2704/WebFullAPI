@@ -26,6 +26,7 @@ Authorization: Bearer <token>
 
 ```txt
 POST /auth/register
+POST /auth/verify-register
 POST /auth/login
 GET  /auth/profile
 ```
@@ -38,6 +39,15 @@ Register body:
   "email": "customer@gmail.com",
   "phone": "0900000000",
   "password": "123456"
+}
+```
+
+Verify register body:
+
+```json
+{
+  "email": "customer@gmail.com",
+  "verification_code": "123456"
 }
 ```
 
