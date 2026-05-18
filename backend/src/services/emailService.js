@@ -71,6 +71,47 @@ const sendVerificationEmail = async ({ to, fullName, verificationCode }) => {
   return info;
 };
 
+const sendPasswordChangeEmail = async ({ to, fullName, verificationCode }) => {
+  const transporter = createTransporter();
+  const from = process.env.SMTP_FROM || process.env.SMTP_USER;
+  const safeFullName = escapeHtml(fullName);
+  const safeVerificationCode = escapeHtml(verificationCode);
+
+  const info = await transporter.sendMail({
+    from,
+    to,
+    subject: "Mã OTP đổi mật khẩu CINEMAX",
+    text: `Xin chào ${fullName},\n\nMã OTP đổi mật khẩu CINEMAX của bạn là: ${verificationCode}\nMã có hiệu lực trong 5 phút.\n\nNếu bạn không yêu cầu đổi mật khẩu, vui lòng bỏ qua email này.`,
+    html: `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #222;">
+        <h2 style="margin: 0 0 12px;">Đổi mật khẩu CINEMAX</h2>
+        <p>Xin chào ${safeFullName},</p>
+        <p>Mã OTP đổi mật khẩu của bạn là:</p>
+        <p style="font-size: 28px; font-weight: 700; letter-spacing: 4px; margin: 16px 0;">
+          ${safeVerificationCode}
+        </p>
+        <p>Mã có hiệu lực trong 5 phút.</p>
+        <p>Nếu bạn không yêu cầu đổi mật khẩu, vui lòng bỏ qua email này.</p>
+      </div>
+    `,
+  });
+
+  if (process.env.NODE_ENV !== "production") {
+    console.log("Password change email result", {
+      messageId: info.messageId,
+      accepted: info.accepted,
+      rejected: info.rejected,
+    });
+  }
+
+  if (info.rejected?.length) {
+    throw new Error(`SMTP rejected recipients: ${info.rejected.join(", ")}`);
+  }
+
+  return info;
+};
+
 module.exports = {
   sendVerificationEmail,
+  sendPasswordChangeEmail,
 };

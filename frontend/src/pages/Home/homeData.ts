@@ -1,6 +1,7 @@
 export type Movie = {
   id?: number;
   title: string;
+  status?: "NOW_SHOWING" | "COMING_SOON" | "ENDED";
   rating: string;
   age: string;
   duration: string;

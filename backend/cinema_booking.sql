@@ -912,3 +912,308 @@ ON pending_users(email);
 
 CREATE INDEX idx_pending_code
 ON pending_users(verification_code);
+
+USE cinema_booking;
+
+-- =====================================================
+-- 1) SINH GHẾ CHO CÁC PHÒNG CHƯA CÓ GHẾ
+-- File gốc mới sinh ghế cho vài phòng, đoạn này bổ sung các phòng còn thiếu.
+-- =====================================================
+
+INSERT INTO seats(room_id, seat_row, seat_number, seat_type)
+WITH RECURSIVE n AS (
+    SELECT 1 AS i
+    UNION ALL
+    SELECT i + 1 FROM n WHERE i < 220
+), room_cfg AS (
+    SELECT
+        r.id AS room_id,
+        r.total_seats,
+        CASE
+            WHEN r.total_seats >= 190 THEN 20
+            WHEN r.total_seats >= 150 THEN 15
+            WHEN r.total_seats = 140 THEN 14
+            ELSE 10
+        END AS seats_per_row
+    FROM rooms r
+    WHERE NOT EXISTS (
+        SELECT 1 FROM seats s WHERE s.room_id = r.id
+    )
+)
+SELECT
+    rc.room_id,
+    CHAR(64 + CEIL(n.i / rc.seats_per_row)) AS seat_row,
+    ((n.i - 1) % rc.seats_per_row) + 1 AS seat_number,
+    CASE
+        WHEN CEIL(n.i / rc.seats_per_row) IN (4,5,6) THEN 'VIP'
+        WHEN CEIL(n.i / rc.seats_per_row) = CEIL(rc.total_seats / rc.seats_per_row)
+             AND ((n.i - 1) % rc.seats_per_row) + 1 IN (5,6,7,8) THEN 'COUPLE'
+        ELSE 'NORMAL'
+    END AS seat_type
+FROM room_cfg rc
+JOIN n ON n.i <= rc.total_seats;
+
+-- =====================================================
+-- 2) THÊM RẠP MỚI + PHÒNG MỚI
+-- =====================================================
+
+INSERT INTO cinemas(name, brand, city, address, phone, logo_url, latitude, longitude, description, status) VALUES
+('Cinestar Quốc Thanh', 'CINESTAR', 'Ho Chi Minh', '271 Nguyễn Trãi, Q.1, TP.HCM', '028 7300 8881', 'https://cdn.cinestar.vn/logo.png', 10.76491, 106.68824, 'Rạp Cinestar khu trung tâm TP.HCM', 'ACTIVE'),
+('Galaxy Long Xuyên', 'GALAXY', 'An Giang', 'Lầu 3, Vincom Plaza Long Xuyên, An Giang', '0296 730 8888', 'https://cdn.galaxy.vn/logo.png', 10.38639, 105.43518, 'Rạp Galaxy tại Long Xuyên', 'ACTIVE'),
+('CGV Sense City Cần Thơ', 'CGV', 'Can Tho', 'Sense City, 01 Đại lộ Hòa Bình, Cần Thơ', '0292 373 3333', 'https://cdn.cgv.vn/logo.png', 10.03371, 105.78362, 'Rạp CGV tại trung tâm Cần Thơ', 'ACTIVE');
+
+INSERT INTO rooms(cinema_id, name, room_type, total_seats, status) VALUES
+((SELECT id FROM cinemas WHERE name='Cinestar Quốc Thanh' LIMIT 1), 'Phòng 1 - 2D', '2D', 80, 'ACTIVE'),
+((SELECT id FROM cinemas WHERE name='Cinestar Quốc Thanh' LIMIT 1), 'Phòng 2 - 3D', '3D', 90, 'ACTIVE'),
+((SELECT id FROM cinemas WHERE name='Galaxy Long Xuyên' LIMIT 1), 'Phòng A - 2D', '2D', 70, 'ACTIVE'),
+((SELECT id FROM cinemas WHERE name='Galaxy Long Xuyên' LIMIT 1), 'Phòng B - 3D', '3D', 70, 'ACTIVE'),
+((SELECT id FROM cinemas WHERE name='CGV Sense City Cần Thơ' LIMIT 1), 'Phòng 1 - 2D', '2D', 100, 'ACTIVE'),
+((SELECT id FROM cinemas WHERE name='CGV Sense City Cần Thơ' LIMIT 1), 'Phòng 2 - IMAX', 'IMAX', 150, 'ACTIVE');
+
+-- Sinh ghế cho các phòng mới vừa thêm
+INSERT INTO seats(room_id, seat_row, seat_number, seat_type)
+WITH RECURSIVE n AS (
+    SELECT 1 AS i
+    UNION ALL
+    SELECT i + 1 FROM n WHERE i < 200
+), room_cfg AS (
+    SELECT
+        r.id AS room_id,
+        r.total_seats,
+        CASE
+            WHEN r.total_seats >= 150 THEN 15
+            ELSE 10
+        END AS seats_per_row
+    FROM rooms r
+    JOIN cinemas c ON c.id = r.cinema_id
+    WHERE c.name IN ('Cinestar Quốc Thanh','Galaxy Long Xuyên','CGV Sense City Cần Thơ')
+      AND NOT EXISTS (SELECT 1 FROM seats s WHERE s.room_id = r.id)
+)
+SELECT
+    rc.room_id,
+    CHAR(64 + CEIL(n.i / rc.seats_per_row)),
+    ((n.i - 1) % rc.seats_per_row) + 1,
+    CASE
+        WHEN CEIL(n.i / rc.seats_per_row) IN (4,5,6) THEN 'VIP'
+        WHEN CEIL(n.i / rc.seats_per_row) = CEIL(rc.total_seats / rc.seats_per_row)
+             AND ((n.i - 1) % rc.seats_per_row) + 1 IN (5,6,7,8) THEN 'COUPLE'
+        ELSE 'NORMAL'
+    END
+FROM room_cfg rc
+JOIN n ON n.i <= rc.total_seats;
+
+-- =====================================================
+-- 3) THÊM PHIM
+-- =====================================================
+
+INSERT INTO movies(title, description, director, duration, release_date, poster_url, trailer_url, language, rating, status) VALUES
+('Godzilla x Kong: The New Empire', 'Godzilla và Kong hợp sức chống lại mối đe dọa khổng lồ mới trong lòng Trái Đất.', 'Adam Wingard', 115, '2024-03-29', 'https://image.tmdb.org/t/p/w500/z1p34vh7dEOnLDmyCrlUVLuoDzd.jpg', 'https://youtube.com/watch?v=lV1OOlGwExM', 'English', 7.5, 'NOW_SHOWING'),
+('Kung Fu Panda 4', 'Po đối mặt với nhiệm vụ tìm người kế nhiệm và chống lại phản diện biến hình nguy hiểm.', 'Mike Mitchell', 94, '2024-03-08', 'https://image.tmdb.org/t/p/w500/kDp1vUBnMpe8ak4rjgl3cLELqjU.jpg', 'https://youtube.com/watch?v=_inKs4eeHiI', 'English', 7.7, 'NOW_SHOWING'),
+('Exhuma', 'Hai pháp sư, một thầy phong thủy và một chuyên gia tang lễ khai quật bí mật đáng sợ.', 'Jang Jae-hyun', 134, '2024-02-22', 'https://image.tmdb.org/t/p/w500/pQYHouPsDw32FhDLr7E3jmw0WTk.jpg', 'https://youtube.com/watch?v=H2O193v3jkM', 'Korean', 8.0, 'NOW_SHOWING'),
+('Civil War', 'Một nhóm nhà báo đi qua nước Mỹ trong bối cảnh nội chiến hiện đại đầy căng thẳng.', 'Alex Garland', 109, '2024-04-12', 'https://image.tmdb.org/t/p/w500/sh7Rg8Er3tFcN9BpKIPOMvALgZd.jpg', 'https://youtube.com/watch?v=aDyQxtg0V2w', 'English', 7.8, 'NOW_SHOWING'),
+('A Quiet Place: Day One', 'Ngày đầu tiên khi những sinh vật săn mồi bằng âm thanh xuất hiện tại thành phố New York.', 'Michael Sarnoski', 99, '2024-06-28', 'https://image.tmdb.org/t/p/w500/yrpPYKijwdMHyTGIOd1iK1h0Xno.jpg', 'https://youtube.com/watch?v=YPY7J-flzE8', 'English', 8.1, 'COMING_SOON'),
+('Detective Conan: The Million-dollar Pentagram', 'Conan điều tra vụ án xoay quanh thanh kiếm quý và Kid tại Hakodate.', 'Chika Nagaoka', 111, '2024-04-12', 'https://image.tmdb.org/t/p/w500/if3lirf4eGDMdA8T4QMX2V6Zg9.jpg', 'https://youtube.com/watch?v=conan2024', 'Japanese', 8.2, 'COMING_SOON'),
+('Móng Vuốt', 'Một chuyến dã ngoại biến thành ác mộng khi nhóm bạn bị săn đuổi bởi sinh vật bí ẩn.', 'Lê Thanh Sơn', 96, '2024-06-07', 'https://image.tmdb.org/t/p/w500/mongvuot.jpg', 'https://youtube.com/watch?v=mongvuot', 'Vietnamese', 7.4, 'COMING_SOON'),
+('Doraemon: Nobita và Bản Giao Hưởng Địa Cầu', 'Nobita cùng Doraemon bước vào cuộc phiêu lưu âm nhạc để cứu Trái Đất.', 'Kazuaki Imai', 115, '2024-03-01', 'https://image.tmdb.org/t/p/w500/doraemon2024.jpg', 'https://youtube.com/watch?v=doraemon2024', 'Japanese', 8.0, 'NOW_SHOWING');
+
+INSERT INTO movie_genres(movie_id, genre_id) VALUES
+((SELECT id FROM movies WHERE title='Godzilla x Kong: The New Empire'), 1),
+((SELECT id FROM movies WHERE title='Godzilla x Kong: The New Empire'), 4),
+((SELECT id FROM movies WHERE title='Godzilla x Kong: The New Empire'), 7),
+((SELECT id FROM movies WHERE title='Kung Fu Panda 4'), 5),
+((SELECT id FROM movies WHERE title='Kung Fu Panda 4'), 2),
+((SELECT id FROM movies WHERE title='Kung Fu Panda 4'), 7),
+((SELECT id FROM movies WHERE title='Exhuma'), 3),
+((SELECT id FROM movies WHERE title='Exhuma'), 9),
+((SELECT id FROM movies WHERE title='Civil War'), 1),
+((SELECT id FROM movies WHERE title='Civil War'), 6),
+((SELECT id FROM movies WHERE title='Civil War'), 9),
+((SELECT id FROM movies WHERE title='A Quiet Place: Day One'), 3),
+((SELECT id FROM movies WHERE title='A Quiet Place: Day One'), 4),
+((SELECT id FROM movies WHERE title='Detective Conan: The Million-dollar Pentagram'), 5),
+((SELECT id FROM movies WHERE title='Detective Conan: The Million-dollar Pentagram'), 7),
+((SELECT id FROM movies WHERE title='Móng Vuốt'), 3),
+((SELECT id FROM movies WHERE title='Móng Vuốt'), 9),
+((SELECT id FROM movies WHERE title='Doraemon: Nobita và Bản Giao Hưởng Địa Cầu'), 5),
+((SELECT id FROM movies WHERE title='Doraemon: Nobita và Bản Giao Hưởng Địa Cầu'), 7);
+
+-- =====================================================
+-- 4) THÊM SUẤT CHIẾU
+-- =====================================================
+
+INSERT INTO showtimes(movie_id, room_id, show_date, week_number, start_time, end_time, status) VALUES
+-- Godzilla x Kong
+((SELECT id FROM movies WHERE title='Godzilla x Kong: The New Empire'), 3, '2026-06-05', 2, '2026-06-05 19:00:00', '2026-06-05 20:55:00', 'OPEN'),
+((SELECT id FROM movies WHERE title='Godzilla x Kong: The New Empire'), 16, '2026-06-06', 3, '2026-06-06 20:00:00', '2026-06-06 21:55:00', 'OPEN'),
+((SELECT id FROM movies WHERE title='Godzilla x Kong: The New Empire'), (SELECT r.id FROM rooms r JOIN cinemas c ON c.id=r.cinema_id WHERE c.name='CGV Sense City Cần Thơ' AND r.room_type='IMAX' LIMIT 1), '2026-06-07', 3, '2026-06-07 18:30:00', '2026-06-07 20:25:00', 'OPEN'),
+
+-- Kung Fu Panda 4
+((SELECT id FROM movies WHERE title='Kung Fu Panda 4'), 24, '2026-06-05', 2, '2026-06-05 10:00:00', '2026-06-05 11:34:00', 'OPEN'),
+((SELECT id FROM movies WHERE title='Kung Fu Panda 4'), (SELECT r.id FROM rooms r JOIN cinemas c ON c.id=r.cinema_id WHERE c.name='Cinestar Quốc Thanh' AND r.name='Phòng 1 - 2D' LIMIT 1), '2026-06-06', 3, '2026-06-06 09:30:00', '2026-06-06 11:04:00', 'OPEN'),
+((SELECT id FROM movies WHERE title='Kung Fu Panda 4'), (SELECT r.id FROM rooms r JOIN cinemas c ON c.id=r.cinema_id WHERE c.name='Galaxy Long Xuyên' AND r.name='Phòng A - 2D' LIMIT 1), '2026-06-07', 3, '2026-06-07 15:00:00', '2026-06-07 16:34:00', 'OPEN'),
+
+-- Exhuma
+((SELECT id FROM movies WHERE title='Exhuma'), 13, '2026-06-05', 2, '2026-06-05 21:00:00', '2026-06-05 23:14:00', 'OPEN'),
+((SELECT id FROM movies WHERE title='Exhuma'), 22, '2026-06-06', 3, '2026-06-06 20:30:00', '2026-06-06 22:44:00', 'OPEN'),
+((SELECT id FROM movies WHERE title='Exhuma'), (SELECT r.id FROM rooms r JOIN cinemas c ON c.id=r.cinema_id WHERE c.name='Cinestar Quốc Thanh' AND r.name='Phòng 2 - 3D' LIMIT 1), '2026-06-08', 3, '2026-06-08 19:00:00', '2026-06-08 21:14:00', 'OPEN'),
+
+-- Civil War
+((SELECT id FROM movies WHERE title='Civil War'), 11, '2026-06-06', 3, '2026-06-06 18:00:00', '2026-06-06 19:49:00', 'OPEN'),
+((SELECT id FROM movies WHERE title='Civil War'), 19, '2026-06-07', 3, '2026-06-07 20:00:00', '2026-06-07 21:49:00', 'OPEN'),
+
+-- A Quiet Place: Day One
+((SELECT id FROM movies WHERE title='A Quiet Place: Day One'), 14, '2026-06-09', 3, '2026-06-09 21:30:00', '2026-06-09 23:09:00', 'OPEN'),
+((SELECT id FROM movies WHERE title='A Quiet Place: Day One'), 23, '2026-06-10', 3, '2026-06-10 21:00:00', '2026-06-10 22:39:00', 'OPEN'),
+
+-- Detective Conan
+((SELECT id FROM movies WHERE title='Detective Conan: The Million-dollar Pentagram'), 1, '2026-06-08', 3, '2026-06-08 13:30:00', '2026-06-08 15:21:00', 'OPEN'),
+((SELECT id FROM movies WHERE title='Detective Conan: The Million-dollar Pentagram'), 6, '2026-06-09', 3, '2026-06-09 16:00:00', '2026-06-09 17:51:00', 'OPEN'),
+
+-- Móng Vuốt
+((SELECT id FROM movies WHERE title='Móng Vuốt'), 20, '2026-06-08', 3, '2026-06-08 20:30:00', '2026-06-08 22:06:00', 'OPEN'),
+((SELECT id FROM movies WHERE title='Móng Vuốt'), (SELECT r.id FROM rooms r JOIN cinemas c ON c.id=r.cinema_id WHERE c.name='Galaxy Long Xuyên' AND r.name='Phòng B - 3D' LIMIT 1), '2026-06-09', 3, '2026-06-09 20:00:00', '2026-06-09 21:36:00', 'OPEN'),
+
+-- Doraemon
+((SELECT id FROM movies WHERE title='Doraemon: Nobita và Bản Giao Hưởng Địa Cầu'), 24, '2026-06-06', 3, '2026-06-06 09:00:00', '2026-06-06 10:55:00', 'OPEN'),
+((SELECT id FROM movies WHERE title='Doraemon: Nobita và Bản Giao Hưởng Địa Cầu'), (SELECT r.id FROM rooms r JOIN cinemas c ON c.id=r.cinema_id WHERE c.name='CGV Sense City Cần Thơ' AND r.name='Phòng 1 - 2D' LIMIT 1), '2026-06-07', 3, '2026-06-07 10:00:00', '2026-06-07 11:55:00', 'OPEN');
+
+-- Thêm giá ghế cho các suất mới chưa có giá
+INSERT INTO showtime_seat_prices(showtime_id, seat_type, price)
+SELECT s.id, 'NORMAL',
+       CASE r.room_type WHEN '2D' THEN 75000 WHEN '3D' THEN 90000 WHEN 'IMAX' THEN 120000 WHEN '4DX' THEN 130000 END
+FROM showtimes s
+JOIN rooms r ON r.id = s.room_id
+WHERE NOT EXISTS (SELECT 1 FROM showtime_seat_prices p WHERE p.showtime_id = s.id AND p.seat_type='NORMAL');
+
+INSERT INTO showtime_seat_prices(showtime_id, seat_type, price)
+SELECT s.id, 'VIP',
+       CASE r.room_type WHEN '2D' THEN 110000 WHEN '3D' THEN 130000 WHEN 'IMAX' THEN 160000 WHEN '4DX' THEN 170000 END
+FROM showtimes s
+JOIN rooms r ON r.id = s.room_id
+WHERE NOT EXISTS (SELECT 1 FROM showtime_seat_prices p WHERE p.showtime_id = s.id AND p.seat_type='VIP');
+
+INSERT INTO showtime_seat_prices(showtime_id, seat_type, price)
+SELECT s.id, 'COUPLE',
+       CASE r.room_type WHEN '2D' THEN 190000 WHEN '3D' THEN 220000 WHEN 'IMAX' THEN 280000 WHEN '4DX' THEN 300000 END
+FROM showtimes s
+JOIN rooms r ON r.id = s.room_id
+WHERE NOT EXISTS (SELECT 1 FROM showtime_seat_prices p WHERE p.showtime_id = s.id AND p.seat_type='COUPLE');
+
+-- =====================================================
+-- 5) THÊM USER + ROLE CUSTOMER
+-- =====================================================
+
+INSERT INTO users(full_name, email, phone, password_hash, status) VALUES
+('Nguyen Minh Quan', 'quan@gmail.com', '0931000001', '123456', 'ACTIVE'),
+('Tran Ngoc Anh', 'ngocanh@gmail.com', '0931000002', '123456', 'ACTIVE'),
+('Le Hoai Nam', 'hoainam@gmail.com', '0931000003', '123456', 'ACTIVE'),
+('Pham My Linh', 'mylinh@gmail.com', '0931000004', '123456', 'ACTIVE'),
+('Do Thanh Dat', 'dat@gmail.com', '0931000005', '123456', 'ACTIVE'),
+('Vo Gia Bao', 'giabao@gmail.com', '0931000006', '123456', 'BLOCKED'),
+('Dang Bao Ngoc', 'baongoc@gmail.com', '0931000007', '123456', 'ACTIVE'),
+('Bui Quang Huy', 'quanghuy@gmail.com', '0931000008', '123456', 'ACTIVE');
+
+INSERT INTO user_roles(user_id, role_id)
+SELECT u.id, r.id
+FROM users u
+JOIN roles r ON r.name = 'CUSTOMER'
+WHERE u.email IN ('quan@gmail.com','ngocanh@gmail.com','hoainam@gmail.com','mylinh@gmail.com','dat@gmail.com','giabao@gmail.com','baongoc@gmail.com','quanghuy@gmail.com')
+  AND NOT EXISTS (
+      SELECT 1 FROM user_roles ur WHERE ur.user_id = u.id AND ur.role_id = r.id
+  );
+
+-- =====================================================
+-- 6) THÊM BOOKING + GHẾ + VÉ + THANH TOÁN + ĐỒ ĂN
+-- =====================================================
+
+INSERT INTO bookings(user_id, showtime_id, booking_code, total_amount, booking_status) VALUES
+((SELECT id FROM users WHERE email='quan@gmail.com'), (SELECT id FROM showtimes WHERE movie_id=(SELECT id FROM movies WHERE title='Godzilla x Kong: The New Empire') AND start_time='2026-06-05 19:00:00' LIMIT 1), 'BK006', 320000, 'CONFIRMED'),
+((SELECT id FROM users WHERE email='ngocanh@gmail.com'), (SELECT id FROM showtimes WHERE movie_id=(SELECT id FROM movies WHERE title='Kung Fu Panda 4') AND start_time='2026-06-05 10:00:00' LIMIT 1), 'BK007', 150000, 'CONFIRMED'),
+((SELECT id FROM users WHERE email='hoainam@gmail.com'), (SELECT id FROM showtimes WHERE movie_id=(SELECT id FROM movies WHERE title='Exhuma') AND start_time='2026-06-05 21:00:00' LIMIT 1), 'BK008', 220000, 'PENDING'),
+((SELECT id FROM users WHERE email='mylinh@gmail.com'), (SELECT id FROM showtimes WHERE movie_id=(SELECT id FROM movies WHERE title='Doraemon: Nobita và Bản Giao Hưởng Địa Cầu') AND start_time='2026-06-06 09:00:00' LIMIT 1), 'BK009', 190000, 'CONFIRMED'),
+((SELECT id FROM users WHERE email='dat@gmail.com'), (SELECT id FROM showtimes WHERE movie_id=(SELECT id FROM movies WHERE title='Civil War') AND start_time='2026-06-06 18:00:00' LIMIT 1), 'BK010', 260000, 'CANCELLED');
+
+-- BK006: 2 ghế VIP IMAX
+INSERT INTO booking_seats(booking_id, seat_id, price) VALUES
+((SELECT id FROM bookings WHERE booking_code='BK006'), (SELECT st.id FROM showtimes sh JOIN seats st ON st.room_id=sh.room_id WHERE sh.id=(SELECT showtime_id FROM bookings WHERE booking_code='BK006') AND st.seat_row='E' AND st.seat_number=7 LIMIT 1), 160000),
+((SELECT id FROM bookings WHERE booking_code='BK006'), (SELECT st.id FROM showtimes sh JOIN seats st ON st.room_id=sh.room_id WHERE sh.id=(SELECT showtime_id FROM bookings WHERE booking_code='BK006') AND st.seat_row='E' AND st.seat_number=8 LIMIT 1), 160000);
+
+-- BK007: 2 ghế NORMAL
+INSERT INTO booking_seats(booking_id, seat_id, price) VALUES
+((SELECT id FROM bookings WHERE booking_code='BK007'), (SELECT st.id FROM showtimes sh JOIN seats st ON st.room_id=sh.room_id WHERE sh.id=(SELECT showtime_id FROM bookings WHERE booking_code='BK007') AND st.seat_row='B' AND st.seat_number=3 LIMIT 1), 75000),
+((SELECT id FROM bookings WHERE booking_code='BK007'), (SELECT st.id FROM showtimes sh JOIN seats st ON st.room_id=sh.room_id WHERE sh.id=(SELECT showtime_id FROM bookings WHERE booking_code='BK007') AND st.seat_row='B' AND st.seat_number=4 LIMIT 1), 75000);
+
+-- BK008: 2 ghế VIP 2D
+INSERT INTO booking_seats(booking_id, seat_id, price) VALUES
+((SELECT id FROM bookings WHERE booking_code='BK008'), (SELECT st.id FROM showtimes sh JOIN seats st ON st.room_id=sh.room_id WHERE sh.id=(SELECT showtime_id FROM bookings WHERE booking_code='BK008') AND st.seat_row='D' AND st.seat_number=5 LIMIT 1), 110000),
+((SELECT id FROM bookings WHERE booking_code='BK008'), (SELECT st.id FROM showtimes sh JOIN seats st ON st.room_id=sh.room_id WHERE sh.id=(SELECT showtime_id FROM bookings WHERE booking_code='BK008') AND st.seat_row='D' AND st.seat_number=6 LIMIT 1), 110000);
+
+INSERT INTO tickets(booking_id, qr_code, checked_in) VALUES
+((SELECT id FROM bookings WHERE booking_code='BK006'), 'QR-BK006-001', FALSE),
+((SELECT id FROM bookings WHERE booking_code='BK006'), 'QR-BK006-002', FALSE),
+((SELECT id FROM bookings WHERE booking_code='BK007'), 'QR-BK007-001', FALSE),
+((SELECT id FROM bookings WHERE booking_code='BK007'), 'QR-BK007-002', FALSE),
+((SELECT id FROM bookings WHERE booking_code='BK008'), 'QR-BK008-001', FALSE),
+((SELECT id FROM bookings WHERE booking_code='BK008'), 'QR-BK008-002', FALSE),
+((SELECT id FROM bookings WHERE booking_code='BK009'), 'QR-BK009-001', FALSE),
+((SELECT id FROM bookings WHERE booking_code='BK010'), 'QR-BK010-001', FALSE);
+
+INSERT INTO payments(booking_id, payment_method, amount, payment_status) VALUES
+((SELECT id FROM bookings WHERE booking_code='BK006'), 'VNPAY', 320000, 'SUCCESS'),
+((SELECT id FROM bookings WHERE booking_code='BK007'), 'MOMO', 150000, 'SUCCESS'),
+((SELECT id FROM bookings WHERE booking_code='BK008'), 'ZALOPAY', 220000, 'PENDING'),
+((SELECT id FROM bookings WHERE booking_code='BK009'), 'CASH', 190000, 'SUCCESS'),
+((SELECT id FROM bookings WHERE booking_code='BK010'), 'MOMO', 260000, 'FAILED');
+
+INSERT INTO booking_foods(booking_id, food_id, size_name, quantity, unit_price) VALUES
+((SELECT id FROM bookings WHERE booking_code='BK006'), 9, 'M', 1, 179000),
+((SELECT id FROM bookings WHERE booking_code='BK006'), 3, 'M', 2, 30000),
+((SELECT id FROM bookings WHERE booking_code='BK007'), 1, 'M', 1, 65000),
+((SELECT id FROM bookings WHERE booking_code='BK008'), 6, 'M', 2, 50000),
+((SELECT id FROM bookings WHERE booking_code='BK009'), 8, 'M', 1, 99000);
+
+-- =====================================================
+-- 7) THÊM ĐỒ ĂN, SIZE, KHUYẾN MÃI
+-- =====================================================
+
+INSERT INTO foods(category_id, name, description, image_url) VALUES
+(2, 'Trà Đào', 'Trà đào mát lạnh', 'tra_dao.jpg'),
+(2, 'Nước Suối', 'Nước suối đóng chai', 'nuoc_suoi.jpg'),
+(3, 'Gà Viên Chiên', 'Gà viên chiên giòn dùng kèm tương ớt', 'ga_vien.jpg'),
+(4, 'Combo Family', '2 bắp L + 4 nước M + 2 snack', 'combo_family.jpg');
+
+INSERT INTO food_sizes(food_id, size_name, price) VALUES
+((SELECT id FROM foods WHERE name='Trà Đào' LIMIT 1), 'M', 35000),
+((SELECT id FROM foods WHERE name='Trà Đào' LIMIT 1), 'L', 45000),
+((SELECT id FROM foods WHERE name='Nước Suối' LIMIT 1), 'S', 15000),
+((SELECT id FROM foods WHERE name='Nước Suối' LIMIT 1), 'M', 20000),
+((SELECT id FROM foods WHERE name='Gà Viên Chiên' LIMIT 1), 'M', 55000),
+((SELECT id FROM foods WHERE name='Gà Viên Chiên' LIMIT 1), 'L', 75000),
+((SELECT id FROM foods WHERE name='Combo Family' LIMIT 1), 'M', 249000);
+
+INSERT INTO promotions(code, name, discount_type, discount_value, min_amount, expire_date, is_active) VALUES
+('WEEKDAY25', 'Giảm 25% ngày thường', 'PERCENT', 25, 180000, '2026-09-30', TRUE),
+('STUDENT30K', 'Ưu đãi học sinh sinh viên 30K', 'FIXED', 30000, 100000, '2026-12-31', TRUE),
+('FAMILY80K', 'Giảm 80K combo gia đình', 'FIXED', 80000, 300000, '2026-08-31', TRUE),
+('IMAX15', 'Giảm 15% vé IMAX', 'PERCENT', 15, 200000, '2026-07-31', TRUE);
+
+INSERT INTO booking_promotions(booking_id, promotion_id, discount_amount) VALUES
+((SELECT id FROM bookings WHERE booking_code='BK006'), (SELECT id FROM promotions WHERE code='IMAX15'), 48000),
+((SELECT id FROM bookings WHERE booking_code='BK007'), (SELECT id FROM promotions WHERE code='STUDENT30K'), 30000),
+((SELECT id FROM bookings WHERE booking_code='BK009'), (SELECT id FROM promotions WHERE code='WELCOME'), 30000);
+
+-- =====================================================
+-- 8) KIỂM TRA SAU KHI ĐỔ THÊM DATA
+-- =====================================================
+
+SELECT '=== EXTRA DATA SUMMARY ===' AS '';
+SELECT CONCAT('Cinemas : ', COUNT(*)) AS summary FROM cinemas;
+SELECT CONCAT('Rooms   : ', COUNT(*)) AS summary FROM rooms;
+SELECT CONCAT('Seats   : ', COUNT(*)) AS summary FROM seats;
+SELECT CONCAT('Movies  : ', COUNT(*)) AS summary FROM movies;
+SELECT CONCAT('Showtime: ', COUNT(*)) AS summary FROM showtimes;
+SELECT CONCAT('Users   : ', COUNT(*)) AS summary FROM users;
+SELECT CONCAT('Bookings: ', COUNT(*)) AS summary FROM bookings;
+SELECT CONCAT('Payments: ', COUNT(*)) AS summary FROM payments;
+SELECT CONCAT('Foods   : ', COUNT(*)) AS summary FROM foods;
+SELECT CONCAT('Promos  : ', COUNT(*)) AS summary FROM promotions;

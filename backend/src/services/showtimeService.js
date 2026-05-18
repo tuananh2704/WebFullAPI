@@ -4,7 +4,9 @@ const AppError = require("../utils/AppError");
 const showtimeSelect = `
   SELECT
     s.id, s.movie_id, m.title AS movie_title, s.room_id, r.name AS room_name,
-    r.room_type, c.name AS cinema_name, s.start_time, s.end_time, s.status
+    r.room_type, c.id AS cinema_id, c.name AS cinema_name,
+    s.start_time, s.end_time, s.status,
+    DATE_FORMAT(s.start_time, '%Y-%m-%d') AS show_date
   FROM showtimes s
   JOIN movies m ON m.id = s.movie_id
   JOIN rooms r ON r.id = s.room_id
@@ -165,7 +167,7 @@ const getShowtimesByCinema = async (cinemaId, { movie_id, date, week } = {}) => 
       s.room_id, r.name AS room_name, r.room_type,
       c.id AS cinema_id, c.name AS cinema_name,
       s.start_time, s.end_time, s.status,
-      DATE(s.start_time) AS show_date
+      DATE_FORMAT(s.start_time, '%Y-%m-%d') AS show_date
     FROM showtimes s
     JOIN movies m ON m.id = s.movie_id
     JOIN rooms r ON r.id = s.room_id
@@ -200,7 +202,7 @@ const getShowtimesByMovieAndCinema = async (movieId, cinemaId, { date } = {}) =>
       s.room_id, r.name AS room_name, r.room_type,
       c.id AS cinema_id, c.name AS cinema_name,
       s.start_time, s.end_time, s.status,
-      DATE(s.start_time) AS show_date
+      DATE_FORMAT(s.start_time, '%Y-%m-%d') AS show_date
     FROM showtimes s
     JOIN movies m ON m.id = s.movie_id
     JOIN rooms r ON r.id = s.room_id

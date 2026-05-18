@@ -26,9 +26,29 @@ const profile = asyncHandler(async (req, res) => {
   return successResponse(res, "Get profile successfully", user);
 });
 
+const requestPasswordChange = asyncHandler(async (req, res) => {
+  requireFields(req.body, ["new_password"]);
+  const data = await authService.requestPasswordChange({
+    userId: req.user.id,
+    new_password: req.body.new_password,
+  });
+  return successResponse(res, "Password change OTP sent successfully", data);
+});
+
+const verifyPasswordChange = asyncHandler(async (req, res) => {
+  requireFields(req.body, ["verification_code"]);
+  const data = await authService.verifyPasswordChange({
+    userId: req.user.id,
+    verification_code: req.body.verification_code,
+  });
+  return successResponse(res, "Password changed successfully", data);
+});
+
 module.exports = {
   register,
   verifyRegister,
   login,
   profile,
+  requestPasswordChange,
+  verifyPasswordChange,
 };

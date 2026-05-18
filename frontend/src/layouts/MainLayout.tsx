@@ -4,6 +4,11 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { getCurrentUser, logout } from "../services/authService";
 import type { ApiUser } from "../types/api";
 
+const getLastName = (fullName: string) => {
+  const parts = fullName.trim().split(/\s+/);
+  return parts[parts.length - 1] || fullName;
+};
+
 const MainLayout = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<ApiUser | null>(getCurrentUser());
@@ -53,7 +58,7 @@ const MainLayout = () => {
               <>
                 <NavLink className="user-name-link" to="/profile" title={user.email}>
                   <UserRound size={18} />
-                  <span className="user-display-name">{user.full_name}</span>
+                  <span className="user-display-name">{getLastName(user.full_name)}</span>
                 </NavLink>
                 <button
                   className="logout-btn"

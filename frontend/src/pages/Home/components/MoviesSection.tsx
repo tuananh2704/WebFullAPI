@@ -20,6 +20,8 @@ const MoviesSection = ({
 }: MoviesSectionProps) => {
   const [activeTab, setActiveTab] = useState<(typeof TABS)[number]>("Đang chiếu");
   const sliderRef = useRef<HTMLDivElement>(null);
+  const activeStatus = activeTab === "Sắp chiếu" ? "COMING_SOON" : "NOW_SHOWING";
+  const visibleMovies = movies.filter((movie) => (movie.status || "NOW_SHOWING") === activeStatus);
 
   const scroll = (dir: "left" | "right") => {
     if (!sliderRef.current) return;
@@ -72,7 +74,7 @@ const MoviesSection = ({
         {/* Horizontal scroll slider */}
         <div className="movie-slider-wrap">
           <div className="movie-slider" ref={sliderRef}>
-            {movies.map((movie) => (
+            {visibleMovies.map((movie) => (
               <MovieCard
                 movie={movie}
                 key={movie.id || movie.title}

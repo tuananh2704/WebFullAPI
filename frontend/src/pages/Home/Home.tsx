@@ -14,6 +14,7 @@ const isFullUrl = (url: string) => /^https?:\/\//i.test(url);
 const mapApiMovieToMovie = (movie: ApiMovie, index: number): Movie => ({
   id: movie.id,
   title: movie.title,
+  status: movie.status,
   rating: String(movie.rating || "8.0"),
   age: movie.status === "COMING_SOON" ? "T16" : "T13",
   duration: movie.duration ? `${movie.duration}min` : "120min",
@@ -40,14 +41,28 @@ const Home = () => {
   useEffect(() => {
     const fetchMovies = async () => {
       try {
-        const movieData = await getMovies({
-          page: 1,
-          limit: 6,
-          status: "NOW_SHOWING",
-        });
+        const [nowShowingData, comingSoonData] = await Promise.all([
+          getMovies({
+            page: 1,
+            limit: 12,
+            status: "NOW_SHOWING",
+          }),
+          getMovies({
+            page: 1,
+            limit: 12,
+            status: "COMING_SOON",
+          }),
+        ]);
 
-        if (movieData.items.length > 0) {
-          setMovies(movieData.items.map(mapApiMovieToMovie));
+        const mappedMovies = [
+          ...nowShowingData.items.map(mapApiMovieToMovie),
+          ...comingSoonData.items.map((movie, index) =>
+            mapApiMovieToMovie(movie, nowShowingData.items.length + index)
+          ),
+        ];
+
+        if (mappedMovies.length > 0) {
+          setMovies(mappedMovies);
         }
       } catch (error) {
         setMovieError("Không kết nối được backend, đang dùng dữ liệu mẫu.");

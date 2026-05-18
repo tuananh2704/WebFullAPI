@@ -23,6 +23,14 @@ type VerifyRegisterPayload = {
   verification_code: string;
 };
 
+type PasswordChangeRequestPayload = {
+  new_password: string;
+};
+
+type PasswordChangeVerifyPayload = {
+  verification_code: string;
+};
+
 export const login = async (payload: LoginPayload) => {
   const response = await apiClient.post<ApiResponse<{ token: string; user: ApiUser }>>(
     "/auth/login",
@@ -56,6 +64,24 @@ export const verifyRegister = async (payload: VerifyRegisterPayload) => {
 
 export const getProfile = async () => {
   const response = await apiClient.get<ApiResponse<ApiUser>>("/auth/profile");
+  return response.data.data;
+};
+
+export const requestPasswordChange = async (payload: PasswordChangeRequestPayload) => {
+  const response = await apiClient.post<ApiResponse<RegisterOtpResponse>>(
+    "/auth/password-change/request",
+    payload
+  );
+
+  return response.data.data;
+};
+
+export const verifyPasswordChange = async (payload: PasswordChangeVerifyPayload) => {
+  const response = await apiClient.post<ApiResponse<{ changed: boolean }>>(
+    "/auth/password-change/verify",
+    payload
+  );
+
   return response.data.data;
 };
 

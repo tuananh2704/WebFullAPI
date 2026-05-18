@@ -2,7 +2,7 @@ const bcrypt = require("bcrypt");
 const pool = require("../configs/db");
 const AppError = require("../utils/AppError");
 const { signToken } = require("../utils/jwt");
-const { sendVerificationEmail } = require("./emailService");
+const { sendPasswordChangeEmail, sendVerificationEmail } = require("./emailService");
 
 const OTP_TTL_SECONDS = 5 * 60;
 
@@ -246,9 +246,106 @@ const login = async ({ email, password }) => {
   return { user: safeUser, token };
 };
 
+const requestPasswordChange = async ({ userId, new_password }) => {
+  if (!new_password || new_password.length < 6) {
+    throw new AppError("Password must be at least 6 characters", 400);
+  }
+
+  await cleanupExpiredPendingUsers();
+
+  const user = await findUserById(userId);
+  if (!user || user.status !== "ACTIVE") {
+    throw new AppError("User not found", 404);
+  }
+
+  const passwordHash = await bcrypt.hash(new_password, 10);
+  const verificationCode = generateVerificationCode();
+
+  await pool.execute(
+    `
+    INSERT INTO pending_users(
+      full_name, email, phone, password_hash, verification_code, expires_at
+    )
+    VALUES (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))
+    ON DUPLICATE KEY UPDATE
+      full_name = VALUES(full_name),
+      phone = VALUES(phone),
+      password_hash = VALUES(password_hash),
+      verification_code = VALUES(verification_code),
+      expires_at = VALUES(expires_at),
+      created_at = CURRENT_TIMESTAMP
+    `,
+    [
+      user.full_name,
+      user.email,
+      user.phone || null,
+      passwordHash,
+      verificationCode,
+      OTP_TTL_SECONDS,
+    ]
+  );
+
+  try {
+    await sendPasswordChangeEmail({
+      to: user.email,
+      fullName: user.full_name,
+      verificationCode,
+    });
+  } catch (error) {
+    await pool.execute("DELETE FROM pending_users WHERE email = ?", [user.email]);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to send password change email", error);
+    }
+    throw new AppError("Không gửi được email OTP. Vui lòng kiểm tra cấu hình SMTP.", 500);
+  }
+
+  schedulePendingUserDeletion(user.email, verificationCode);
+
+  return {
+    email: user.email,
+    expires_in_seconds: OTP_TTL_SECONDS,
+  };
+};
+
+const verifyPasswordChange = async ({ userId, verification_code }) => {
+  await cleanupExpiredPendingUsers();
+
+  const user = await findUserById(userId);
+  if (!user || user.status !== "ACTIVE") {
+    throw new AppError("User not found", 404);
+  }
+
+  const [pendingRows] = await pool.execute(
+    `
+    SELECT * FROM pending_users
+    WHERE email = ? AND verification_code = ? AND expires_at > NOW()
+    LIMIT 1
+    `,
+    [user.email, verification_code]
+  );
+
+  const pendingUser = pendingRows[0];
+  if (!pendingUser) {
+    await pool.execute("DELETE FROM pending_users WHERE email = ? AND expires_at <= NOW()", [
+      user.email,
+    ]);
+    throw new AppError("OTP is invalid or expired", 400);
+  }
+
+  await pool.execute("UPDATE users SET password_hash = ? WHERE id = ?", [
+    pendingUser.password_hash,
+    user.id,
+  ]);
+  await pool.execute("DELETE FROM pending_users WHERE id = ?", [pendingUser.id]);
+
+  return { changed: true };
+};
+
 module.exports = {
   register,
   verifyRegister,
   login,
   findUserById,
+  requestPasswordChange,
+  verifyPasswordChange,
 };
