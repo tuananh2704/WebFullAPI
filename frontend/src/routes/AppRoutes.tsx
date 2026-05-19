@@ -10,6 +10,7 @@ import MoviesPage from "../pages/Movies/MoviesPage";
 import ProfilePage from "../pages/Profile/ProfilePage";
 import CinemaListPage from "../pages/Cinemas/CinemaListPage";
 import CinemaDetailPage from "../pages/Cinemas/CinemaDetailPage";
+import MembershipPage from "../pages/Membership/MembershipPage";
 
 const AppRoutes = () => {
   return (
@@ -23,6 +24,7 @@ const AppRoutes = () => {
           <Route path="cinemas" element={<CinemaListPage />} />
           <Route path="cinemas/:id" element={<CinemaDetailPage />} />
           <Route path="bookings" element={<BookingHistoryPage />} />
+          <Route path="membership" element={<MembershipPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="admin" element={<AdminPage />} />
         </Route>

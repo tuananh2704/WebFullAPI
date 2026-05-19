@@ -10,16 +10,27 @@ import { getSeatsByShowtime } from "../../services/seatService";
 import { getCinemas, getShowtimesByMovieAndCinema } from "../../services/cinemaService";
 import { getShowtimesByMovie } from "../../services/showtimeService";
 import { getCurrentUser, isLoggedIn } from "../../services/authService";
+import { getMyMembership } from "../../services/membershipService";
 import type {
   ApiCinema,
   ApiFood,
   ApiFoodSize,
+  ApiMembershipInfo,
   ApiMovie,
   ApiSeat,
   ApiShowtime,
   ShowtimeByDate,
 } from "../../types/api";
 import { formatCurrency, formatDateTime } from "../../utils/format";
+
+type SelectedFoodItem = {
+  sizeId: number;
+  food_id: number;
+  food_name: string;
+  size_name: string;
+  price: number;
+  quantity: number;
+};
 
 const ROOM_TYPE_COLOR: Record<string, string> = {
   "2D": "#37474F",
@@ -83,9 +94,10 @@ const MovieDetailPage = () => {
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
   const [foods, setFoods] = useState<ApiFood[]>([]);
   const [foodSizes, setFoodSizes] = useState<ApiFoodSize[]>([]);
-  const [selectedFoodSizeId, setSelectedFoodSizeId] = useState("");
+  const [selectedFoods, setSelectedFoods] = useState<SelectedFoodItem[]>([]);
   const [promotionCode, setPromotionCode] = useState("");
   const [discount, setDiscount] = useState(0);
+  const [membershipInfo, setMembershipInfo] = useState<ApiMembershipInfo | null>(null);
   const [message, setMessage] = useState("");
   const [loadingPage, setLoadingPage] = useState(true);
   const [loadingShowtimes, setLoadingShowtimes] = useState(false);
@@ -133,6 +145,13 @@ const MovieDetailPage = () => {
       }
     };
     load();
+
+    // Fetch membership info for logged-in users
+    if (isLoggedIn()) {
+      getMyMembership()
+        .then(setMembershipInfo)
+        .catch(() => {});
+    }
   }, [movieId]);
 
   // Pre-select showtime from URL param ?showtime_id=X
@@ -187,15 +206,61 @@ const MovieDetailPage = () => {
   }, [movieShowtimes, selectedDate]);
 
   const selectedSeatRows = seats.filter((seat) => selectedSeats.includes(seat.id));
-  const selectedFood = foodSizes.find((item) => String(item.id) === selectedFoodSizeId);
 
-  const totalBeforeDiscount = useMemo(() => {
-    const seatTotal = selectedSeatRows.reduce((sum, seat) => sum + Number(seat.price || 0), 0);
-    const foodTotal = selectedFood ? Number(selectedFood.price) : 0;
-    return seatTotal + foodTotal;
-  }, [selectedSeatRows, selectedFood]);
+  // Food helpers
+  const handleAddFood = (sizeId: number) => {
+    const size = foodSizes.find((s) => s.id === sizeId);
+    if (!size) return;
 
-  const finalAmount = Math.max(totalBeforeDiscount - discount, 0);
+    setSelectedFoods((prev) => {
+      const existing = prev.find((f) => f.sizeId === sizeId);
+      if (existing) {
+        return prev.map((f) =>
+          f.sizeId === sizeId ? { ...f, quantity: f.quantity + 1 } : f
+        );
+      }
+      return [
+        ...prev,
+        {
+          sizeId: size.id,
+          food_id: size.food_id,
+          food_name: size.food_name,
+          size_name: size.size_name,
+          price: Number(size.price),
+          quantity: 1,
+        },
+      ];
+    });
+  };
+
+  const handleRemoveFood = (sizeId: number) => {
+    setSelectedFoods((prev) => {
+      const existing = prev.find((f) => f.sizeId === sizeId);
+      if (!existing) return prev;
+      if (existing.quantity <= 1) {
+        return prev.filter((f) => f.sizeId !== sizeId);
+      }
+      return prev.map((f) =>
+        f.sizeId === sizeId ? { ...f, quantity: f.quantity - 1 } : f
+      );
+    });
+  };
+
+  const seatTotal = useMemo(
+    () => selectedSeatRows.reduce((sum, seat) => sum + Number(seat.price || 0), 0),
+    [selectedSeatRows]
+  );
+  const foodTotal = useMemo(
+    () => selectedFoods.reduce((sum, f) => sum + f.price * f.quantity, 0),
+    [selectedFoods]
+  );
+  const membershipDiscount = useMemo(() => {
+    if (!membershipInfo || membershipInfo.tier.discount_percent === 0) return 0;
+    return Math.round((seatTotal * membershipInfo.tier.discount_percent) / 100);
+  }, [seatTotal, membershipInfo]);
+
+  const totalBeforeDiscount = seatTotal + foodTotal;
+  const finalAmount = Math.max(totalBeforeDiscount - membershipDiscount - discount, 0);
 
   const handleChooseShowtime = async (showtime: ApiShowtime) => {
     setSelectedShowtime(showtime);
@@ -239,9 +304,11 @@ const MovieDetailPage = () => {
     setBookingLoading(true);
     setMessage("");
     try {
-      const foodPayload = selectedFood
-        ? [{ food_id: selectedFood.food_id, size_name: selectedFood.size_name, quantity: 1 }]
-        : [];
+      const foodPayload = selectedFoods.map((f) => ({
+        food_id: f.food_id,
+        size_name: f.size_name,
+        quantity: f.quantity,
+      }));
 
       // Step 1: Create booking
       const booking: any = await createBooking({
@@ -270,7 +337,7 @@ const MovieDetailPage = () => {
     setSelectedSeats([]);
     setDiscount(0);
     setPromotionCode("");
-    setSelectedFoodSizeId("");
+    setSelectedFoods([]);
     setMessage("");
     // Reload seats to reflect newly booked seats
     if (selectedShowtime) {
@@ -620,15 +687,37 @@ const MovieDetailPage = () => {
                 <div className="checkout-row">
                   {/* Food */}
                   <div className="data-card">
-                    <h2>3. Đồ ăn (tuỳ chọn)</h2>
-                    <select value={selectedFoodSizeId} onChange={(e) => setSelectedFoodSizeId(e.target.value)}>
-                      <option value="">Không chọn</option>
-                      {foodSizes.map((size) => (
-                        <option key={size.id} value={size.id}>
-                          {size.food_name} size {size.size_name} - {formatCurrency(size.price)}
-                        </option>
-                      ))}
-                    </select>
+                    <h2>3. Đồ ăn & Nước uống</h2>
+                    <div className="food-selection-grid">
+                      {foodSizes.map((size) => {
+                        const selected = selectedFoods.find((f) => f.sizeId === size.id);
+                        return (
+                          <div className="food-item" key={size.id}>
+                            <div className="food-item-info">
+                              <strong>{size.food_name}</strong>
+                              <small>Size {size.size_name}</small>
+                              <span className="food-item-price">{formatCurrency(size.price)}</span>
+                            </div>
+                            <div className="food-item-actions">
+                              <button
+                                className="food-qty-btn"
+                                onClick={() => handleRemoveFood(size.id)}
+                                disabled={!selected}
+                              >
+                                −
+                              </button>
+                              <span className="food-qty-count">{selected?.quantity || 0}</span>
+                              <button
+                                className="food-qty-btn add"
+                                onClick={() => handleAddFood(size.id)}
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
 
                   {/* Promotion */}
@@ -644,19 +733,26 @@ const MovieDetailPage = () => {
                 {/* Payment summary */}
                 <div className="data-card payment-summary-card">
                   <h2>4. Thanh toán</h2>
-                  <div className="payment-line">
-                    <span>Ghế ({selectedSeats.length})</span>
-                    <span>{formatCurrency(selectedSeatRows.reduce((s, seat) => s + Number(seat.price || 0), 0))}</span>
-                  </div>
-                  {selectedFood && (
-                    <div className="payment-line">
-                      <span>{selectedFood.food_name} ({selectedFood.size_name})</span>
-                      <span>{formatCurrency(selectedFood.price)}</span>
+                  <div className="payment-line" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
+                      <span>Ghế ({selectedSeats.length})</span>
+                      <span>{formatCurrency(seatTotal)}</span>
                     </div>
-                  )}
+                    {membershipDiscount > 0 && (
+                      <span className="muted" style={{ fontSize: 12 }}>
+                        (Đã giảm {membershipInfo?.tier.discount_percent}% với VIP {membershipInfo?.tier.name})
+                      </span>
+                    )}
+                  </div>
+                  {selectedFoods.map((f) => (
+                    <div className="payment-line" key={f.sizeId}>
+                      <span>{f.food_name} ({f.size_name}) x{f.quantity}</span>
+                      <span>{formatCurrency(f.price * f.quantity)}</span>
+                    </div>
+                  ))}
                   {discount > 0 && (
                     <div className="payment-line discount">
-                      <span>Giảm giá</span>
+                      <span>Mã khuyến mãi</span>
                       <span>-{formatCurrency(discount)}</span>
                     </div>
                   )}

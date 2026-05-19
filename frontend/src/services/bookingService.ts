@@ -6,7 +6,7 @@ type CreateBookingPayload = {
   seat_ids: number[];
   foods?: Array<{
     food_id: number;
-    size_name: "S" | "M" | "L";
+    size_name: string;
     quantity: number;
   }>;
 };

@@ -117,3 +117,77 @@ export type ShowtimeByDate = {
   day_label: string;   // 'T2 - 20/05'
   showtimes: ApiShowtime[];
 };
+
+// =====================================================
+// VIP MEMBERSHIP TYPES
+// =====================================================
+
+export type ApiMembershipTier = {
+  id: number;
+  name: string;
+  tier_level: number;
+  min_spend: number;
+  max_spend: number | null;
+  discount_percent: number;
+  point_multiplier: number;
+  color_hex: string;
+  icon_url: string | null;
+  description: string | null;
+  benefits: ApiMembershipBenefit[];
+};
+
+export type ApiMembershipBenefit = {
+  id: number;
+  tier_id?: number;
+  benefit_key: string;
+  label: string;
+  value: string | null;
+  used_this_month?: number;
+};
+
+export type ApiMembershipInfo = {
+  user_id: number;
+  tier: {
+    id: number;
+    name: string;
+    level: number;
+    discount_percent: number;
+    point_multiplier: number;
+    color_hex: string;
+    icon_url: string | null;
+    description: string | null;
+  };
+  total_spend: number;
+  points: number;
+  points_used: number;
+  points_available: number;
+  tier_updated_at: string;
+  member_since: string;
+  next_tier: {
+    id: number;
+    name: string;
+    min_spend: number;
+    discount_percent: number;
+    spend_remaining: number;
+    progress_percent: number;
+  } | null;
+  benefits: ApiMembershipBenefit[];
+};
+
+export type ApiTierHistory = {
+  id: number;
+  reason: "UPGRADE" | "DOWNGRADE" | "INIT";
+  total_spend_at: number;
+  changed_at: string;
+  old_tier_name: string | null;
+  old_color: string | null;
+  new_tier_name: string;
+  new_color: string;
+};
+
+export type ApiBenefitUsage = {
+  id: number;
+  benefit_key: string;
+  used_at: string;
+  booking_code: string | null;
+};

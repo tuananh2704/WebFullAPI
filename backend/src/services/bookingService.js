@@ -1,5 +1,6 @@
 const pool = require("../configs/db");
 const AppError = require("../utils/AppError");
+const membershipService = require("./membershipService");
 
 const generateBookingCode = () => `BK${Date.now()}`;
 
@@ -37,7 +38,7 @@ const findBookedSeats = async (connection, showtimeId, seatIds) => {
   return rows;
 };
 
-const createBooking = async ({ userId, showtime_id, seat_ids, foods = [] }) => {
+const createBooking = async ({ userId, showtime_id, seat_ids, foods = [], points_to_use = 0 }) => {
   if (!seat_ids?.length) {
     throw new AppError("seat_ids is required", 400);
   }
@@ -59,14 +60,20 @@ const createBooking = async ({ userId, showtime_id, seat_ids, foods = [] }) => {
       throw new AppError("Invalid seat selection for this showtime", 400);
     }
 
-    let totalAmount = seatPrices.reduce((sum, seat) => sum + Number(seat.price), 0);
+    const ticketTotal = seatPrices.reduce((sum, seat) => sum + Number(seat.price), 0);
+
+    // Áp membership discount lên giá vé
+    const { discount_amount: membershipDiscount } =
+      await membershipService.calculateMembershipDiscount(userId, ticketTotal);
+
+    let totalAmount = ticketTotal - membershipDiscount;
 
     const [bookingResult] = await connection.execute(
       `
-      INSERT INTO bookings(user_id, showtime_id, booking_code, total_amount, booking_status)
-      VALUES (?, ?, ?, ?, 'PENDING')
+      INSERT INTO bookings(user_id, showtime_id, booking_code, total_amount, membership_discount, booking_status)
+      VALUES (?, ?, ?, ?, ?, 'PENDING')
       `,
-      [userId, showtime_id, generateBookingCode(), totalAmount]
+      [userId, showtime_id, generateBookingCode(), totalAmount, membershipDiscount]
     );
 
     const bookingId = bookingResult.insertId;
@@ -145,7 +152,8 @@ const getBookingDetail = async (bookingId, userId, isAdmin = false) => {
   const [bookingRows] = await pool.execute(
     `
     SELECT
-      b.id, b.user_id, b.showtime_id, b.booking_code, b.total_amount, b.booking_status,
+      b.id, b.user_id, b.showtime_id, b.booking_code, b.total_amount,
+      b.membership_discount, b.points_earned, b.points_used, b.booking_status,
       s.start_time, s.end_time, m.title AS movie_title, r.name AS room_name, c.name AS cinema_name
     FROM bookings b
     JOIN showtimes s ON s.id = b.showtime_id

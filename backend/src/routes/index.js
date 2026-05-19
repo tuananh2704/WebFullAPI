@@ -9,6 +9,7 @@ const foodRoutes = require("./foodRoutes");
 const promotionRoutes = require("./promotionRoutes");
 const adminRoutes = require("./adminRoutes");
 const cinemaRoutes = require("./cinemaRoutes");
+const membershipRoutes = require("./membershipRoutes");
 const { successResponse } = require("../utils/apiResponse");
 
 const router = express.Router();
@@ -58,6 +59,12 @@ router.get("/docs", (req, res) => {
     payments: ["POST /api/payments"],
     foods: ["GET /api/foods", "GET /api/foods/sizes?food_id=1"],
     promotions: ["POST /api/promotions/apply"],
+    membership: [
+      "GET /api/membership/tiers",
+      "GET /api/membership/me",
+      "GET /api/membership/history",
+      "GET /api/membership/benefits/usage",
+    ],
     admin: [
       "GET /api/admin/dashboard",
       "POST /api/admin/movies",
@@ -83,5 +90,6 @@ router.use("/foods", foodRoutes);
 router.use("/promotions", promotionRoutes);
 router.use("/admin", adminRoutes);
 router.use("/cinemas", cinemaRoutes);
+router.use("/membership", membershipRoutes);
 
 module.exports = router;

@@ -1,12 +1,14 @@
-import { FormEvent, useEffect, useState } from "react";
+import React, { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   BadgeCheck,
+  Crown,
   KeyRound,
   LogOut,
   Mail,
   Phone,
   ShieldCheck,
+  Star,
   UserRound,
 } from "lucide-react";
 import {
@@ -15,7 +17,9 @@ import {
   requestPasswordChange,
   verifyPasswordChange,
 } from "../../services/authService";
-import type { ApiUser } from "../../types/api";
+import { getMyMembership } from "../../services/membershipService";
+import { formatCurrency } from "../../utils/format";
+import type { ApiUser, ApiMembershipInfo } from "../../types/api";
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -26,6 +30,7 @@ const ProfilePage = () => {
   const [otpStep, setOtpStep] = useState(false);
   const [loading, setLoading] = useState(false);
   const [countdown, setCountdown] = useState(0);
+  const [membership, setMembership] = useState<ApiMembershipInfo | null>(null);
   const [passwordForm, setPasswordForm] = useState({
     new_password: "",
     confirm_password: "",
@@ -36,6 +41,9 @@ const ProfilePage = () => {
     getProfile()
       .then(setProfile)
       .catch(() => setMessage("Bạn cần đăng nhập để xem profile."));
+    getMyMembership()
+      .then(setMembership)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -170,6 +178,63 @@ const ProfilePage = () => {
                 {profile.status}
               </div>
             </section>
+
+            {membership && (
+              <section
+                className="profile-card profile-membership-card"
+                style={{ "--tier-color": membership.tier.color_hex } as React.CSSProperties}
+              >
+                <div className="profile-card-title">
+                  <div>
+                    <p className="profile-label">VIP Membership</p>
+                    <h2 style={{ color: membership.tier.color_hex }}>
+                      <Crown size={22} />{" "}
+                      {membership.tier.name}
+                    </h2>
+                  </div>
+                  <Star size={28} style={{ color: membership.tier.color_hex }} />
+                </div>
+
+                <div className="profile-membership-stats">
+                  <div>
+                    <span>{formatCurrency(membership.total_spend)}</span>
+                    <small>Tổng chi tiêu</small>
+                  </div>
+                  <div>
+                    <span style={{ color: "#ffd60a" }}>{membership.points_available}</span>
+                    <small>Điểm khả dụng</small>
+                  </div>
+                  <div>
+                    <span>{membership.tier.discount_percent}%</span>
+                    <small>Giảm giá vé</small>
+                  </div>
+                </div>
+
+                {membership.next_tier && (
+                  <div className="profile-membership-progress">
+                    <div className="tier-progress-header">
+                      <span>Tiến độ → {membership.next_tier.name}</span>
+                      <span>{membership.next_tier.progress_percent}%</span>
+                    </div>
+                    <div className="tier-progress-bar">
+                      <div
+                        className="tier-progress-fill"
+                        style={{ width: `${membership.next_tier.progress_percent}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  className="primary-btn compact profile-action-btn"
+                  type="button"
+                  onClick={() => navigate("/membership")}
+                >
+                  <Crown size={18} />
+                  Xem chi tiết VIP
+                </button>
+              </section>
+            )}
 
             <section className="profile-card profile-info-card">
               <div className="profile-card-title">

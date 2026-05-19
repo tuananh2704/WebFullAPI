@@ -171,6 +171,24 @@ const BookingHistoryPage = () => {
                     <span>Tổng tiền</span>
                     <strong>{formatCurrency(detail.total_amount)}</strong>
                   </div>
+                  {detail.membership_discount > 0 && (
+                    <div>
+                      <CircleDollarSign size={18} />
+                      <span>Giảm giá VIP</span>
+                      <strong style={{ color: "#66bb6a" }}>
+                        -{formatCurrency(detail.membership_discount)}
+                      </strong>
+                    </div>
+                  )}
+                  {detail.points_earned > 0 && (
+                    <div>
+                      <CircleDollarSign size={18} />
+                      <span>Điểm tích lũy</span>
+                      <strong style={{ color: "#ffd60a" }}>
+                        +{detail.points_earned} điểm
+                      </strong>
+                    </div>
+                  )}
                 </div>
 
                 <div className="booking-detail-section">

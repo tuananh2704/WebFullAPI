@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Film, LogOut, Search, UserRound } from "lucide-react";
+import { Crown, Film, LogOut, Search, UserRound } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { getCurrentUser, logout } from "../services/authService";
 import type { ApiUser } from "../types/api";
@@ -47,6 +47,12 @@ const MainLayout = () => {
             <NavLink to="/movies">Phim</NavLink>
             <NavLink to="/cinemas">Rạp</NavLink>
             <NavLink to="/bookings">Booking</NavLink>
+            {user && (
+              <NavLink to="/membership" className="nav-vip">
+                <Crown size={16} />
+                VIP
+              </NavLink>
+            )}
           </nav>
 
           <div className="header-actions">
