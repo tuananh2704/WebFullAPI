@@ -25,6 +25,7 @@ const AdminPage = () => {
     duration: "",
     release_date: "",
     poster_url: "",
+    trailer_url: "",
     language: "English",
     rating: "8.0",
     status: "NOW_SHOWING",
@@ -68,6 +69,7 @@ const AdminPage = () => {
         duration: Number(movieForm.duration),
         release_date: movieForm.release_date,
         poster_url: movieForm.poster_url,
+        trailer_url: movieForm.trailer_url,
         language: movieForm.language,
         rating: Number(movieForm.rating),
         status: movieForm.status as ApiMovie["status"],
@@ -79,7 +81,7 @@ const AdminPage = () => {
         await createAdminMovie(payload);
       }
 
-      setMovieForm({ ...movieForm, id: "", title: "", description: "" });
+      setMovieForm({ ...movieForm, id: "", title: "", description: "", trailer_url: "" });
       await loadAdminData();
     } catch (error: any) {
       setMessage(error.response?.data?.message || "Không lưu được movie.");
@@ -132,6 +134,7 @@ const AdminPage = () => {
             <input placeholder="Duration" value={movieForm.duration} onChange={(e) => setMovieForm({ ...movieForm, duration: e.target.value })} />
             <input type="date" value={movieForm.release_date} onChange={(e) => setMovieForm({ ...movieForm, release_date: e.target.value })} />
             <input placeholder="Poster URL" value={movieForm.poster_url} onChange={(e) => setMovieForm({ ...movieForm, poster_url: e.target.value })} />
+            <input placeholder="Trailer URL (YouTube)" value={movieForm.trailer_url} onChange={(e) => setMovieForm({ ...movieForm, trailer_url: e.target.value })} />
             <input placeholder="Language" value={movieForm.language} onChange={(e) => setMovieForm({ ...movieForm, language: e.target.value })} />
             <input placeholder="Rating" value={movieForm.rating} onChange={(e) => setMovieForm({ ...movieForm, rating: e.target.value })} />
             <select value={movieForm.status} onChange={(e) => setMovieForm({ ...movieForm, status: e.target.value })}>
@@ -155,6 +158,7 @@ const AdminPage = () => {
                     duration: String(movie.duration || ""),
                     release_date: movie.release_date?.slice(0, 10) || "",
                     poster_url: movie.poster_url || "",
+                    trailer_url: movie.trailer_url || "",
                     language: movie.language || "",
                     rating: String(movie.rating || ""),
                     status: movie.status,

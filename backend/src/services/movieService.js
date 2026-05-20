@@ -211,10 +211,43 @@ const deleteMovie = async (movieId) => {
   await pool.execute("DELETE FROM movies WHERE id = ?", [movieId]);
 };
 
+const getTrailerMovies = async () => {
+  const [rows] = await pool.execute(
+    `
+    SELECT
+      m.id,
+      m.title,
+      m.trailer_url,
+      m.poster_url,
+      COALESCE(MIN(g.name), "Cinema") AS genre,
+      m.release_date
+    FROM movies m
+    LEFT JOIN movie_genres mg ON mg.movie_id = m.id
+    LEFT JOIN genres g ON g.id = mg.genre_id
+    WHERE m.status = "NOW_SHOWING"
+      AND m.trailer_url IS NOT NULL
+      AND TRIM(m.trailer_url) <> ""
+    GROUP BY m.id
+    ORDER BY
+      CASE
+        WHEN m.title = 'Avengers: Endgame' THEN 0
+        WHEN m.title = 'The Conjuring' THEN 1
+        ELSE 2
+      END,
+      m.id DESC,
+      m.release_date DESC
+    LIMIT 6
+    `
+  );
+
+  return rows;
+};
+
 module.exports = {
   getMovies,
   getMovieById,
   createMovie,
   updateMovie,
   deleteMovie,
+  getTrailerMovies,
 };

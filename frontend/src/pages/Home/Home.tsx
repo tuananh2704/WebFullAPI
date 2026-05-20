@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { getMovies } from "../../services/movieService";
 import { getShowtimesByMovie } from "../../services/showtimeService";
 import type { ApiMovie, ApiShowtime } from "../../types/api";
+import HeroTrailerSlider from "../../components/HeroTrailerSlider";
 import BookingSection from "./components/BookingSection";
 import DealsSection from "./components/DealsSection";
-import HeroSection from "./components/HeroSection";
 import MoviesSection from "./components/MoviesSection";
 import { fallbackMovies, posterFallbacks } from "./homeData";
 import type { Movie } from "./homeData";
@@ -105,8 +105,7 @@ const Home = () => {
 
   return (
     <>
-      {/* Video hero thuần – không có text */}
-      <HeroSection />
+      <HeroTrailerSlider />
 
       {/* Danh sách phim – hiện ra ngay bên dưới video */}
       <MoviesSection

@@ -17,6 +17,15 @@ export type MovieSearchParams = {
   sort?: "rating_desc" | "release_desc" | "title_asc";
 };
 
+export interface TrailerSlide {
+  id: number;
+  title: string;
+  trailer_url: string;
+  poster_url: string;
+  genre: string;
+  release_date: string;
+}
+
 export const getMovies = async (params: MovieSearchParams = {}): Promise<PaginatedMovies<ApiMovie>> => {
   const response = await apiClient.get<ApiResponse<PaginatedMovies<ApiMovie>>>("/movies", { params });
   return response.data.data;
@@ -24,5 +33,10 @@ export const getMovies = async (params: MovieSearchParams = {}): Promise<Paginat
 
 export const getMovieById = async (id: number): Promise<ApiMovie> => {
   const response = await apiClient.get<ApiResponse<ApiMovie>>(`/movies/${id}`);
+  return response.data.data;
+};
+
+export const getMovieTrailers = async (): Promise<TrailerSlide[]> => {
+  const response = await apiClient.get<ApiResponse<TrailerSlide[]>>("/movies/trailers");
   return response.data.data;
 };

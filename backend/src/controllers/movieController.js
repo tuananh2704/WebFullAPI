@@ -38,10 +38,16 @@ const deleteMovie = asyncHandler(async (req, res) => {
   return successResponse(res, "Delete movie successfully");
 });
 
+const getMovieTrailers = asyncHandler(async (_req, res) => {
+  const trailers = await movieService.getTrailerMovies();
+  return successResponse(res, "Get movie trailers successfully", trailers);
+});
+
 module.exports = {
   getMovies,
   getMovieDetail,
   createMovie,
   updateMovie,
   deleteMovie,
+  getMovieTrailers,
 };
