@@ -52,6 +52,14 @@ const formatLocalDate = (date: Date) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
+const getShowDate = (showtime: ApiShowtime) => {
+  if (showtime.show_date) {
+    return showtime.show_date.slice(0, 10);
+  }
+
+  return formatLocalDate(new Date(showtime.start_time));
+};
+
 const generateNext30Days = (): string[] => {
   const days: string[] = [];
   const now = new Date();
@@ -82,13 +90,17 @@ const MovieDetailPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const movieId = Number(id);
+  const preselectedCinemaId = Number(searchParams.get("cinema_id"));
+  const preselectedDate = searchParams.get("date");
 
   const [movie, setMovie] = useState<ApiMovie | null>(null);
   const [cinemas, setCinemas] = useState<ApiCinema[]>([]);
   const [movieShowtimes, setMovieShowtimes] = useState<ApiShowtime[]>([]);
-  const [selectedCinemaId, setSelectedCinemaId] = useState<number | null>(null);
+  const [selectedCinemaId, setSelectedCinemaId] = useState<number | null>(
+    Number.isFinite(preselectedCinemaId) && preselectedCinemaId > 0 ? preselectedCinemaId : null
+  );
   const [showtimesByDate, setShowtimesByDate] = useState<ShowtimeByDate[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>(() => formatLocalDate(new Date()));
+  const [selectedDate, setSelectedDate] = useState<string>(() => preselectedDate || formatLocalDate(new Date()));
   const [selectedShowtime, setSelectedShowtime] = useState<ApiShowtime | null>(null);
   const [seats, setSeats] = useState<ApiSeat[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
@@ -121,7 +133,7 @@ const MovieDetailPage = () => {
     ? 2
     : 3;
 
-  const next30Days = generateNext30Days();
+  const next30Days = useMemo(() => generateNext30Days(), []);
 
   useEffect(() => {
     const load = async () => {
@@ -196,14 +208,74 @@ const MovieDetailPage = () => {
 
   const currentShowtimes =
     showtimesByDate.find((g) => g.date === selectedDate)?.showtimes ?? [];
-  const cinemasWithSlots = useMemo(() => {
+
+  const cinemaTotalSlotMap = useMemo(() => {
+    const slotMap = new Map<number, number>();
+
+    for (const showtime of movieShowtimes) {
+      if (showtime.status !== "OPEN" || !showtime.cinema_id) {
+        continue;
+      }
+
+      slotMap.set(showtime.cinema_id, (slotMap.get(showtime.cinema_id) || 0) + 1);
+    }
+
+    return slotMap;
+  }, [movieShowtimes]);
+
+  const cinemaOptions = useMemo(() => {
+    return [...cinemas]
+      .sort((a, b) => {
+        const aSlots = cinemaTotalSlotMap.get(a.id) || 0;
+        const bSlots = cinemaTotalSlotMap.get(b.id) || 0;
+
+        if (bSlots !== aSlots) {
+          return bSlots - aSlots;
+        }
+
+        return a.name.localeCompare(b.name, "vi");
+      })
+      .map((cinema) => {
+        const slotCount = cinemaTotalSlotMap.get(cinema.id) || 0;
+        return {
+          value: cinema.id,
+          label: `${cinema.name} (${cinema.city})${
+            slotCount > 0 ? ` (${slotCount} slot còn)` : " (hết slot)"
+          }`,
+          disabled: slotCount === 0,
+        };
+      });
+  }, [cinemas, cinemaTotalSlotMap]);
+
+  const selectedCinemaShowtimeDateSet = useMemo(() => {
+    if (!selectedCinemaId) {
+      return new Set<string>();
+    }
+
     return new Set(
       movieShowtimes
-        .filter((showtime) => showtime.status !== "CANCELLED" && showtime.show_date === selectedDate)
-        .map((showtime) => showtime.cinema_id)
-        .filter((cinemaId): cinemaId is number => typeof cinemaId === "number")
+        .filter(
+          (showtime) =>
+            showtime.status === "OPEN" &&
+            showtime.cinema_id === selectedCinemaId
+        )
+        .map(getShowDate)
     );
-  }, [movieShowtimes, selectedDate]);
+  }, [movieShowtimes, selectedCinemaId]);
+
+  useEffect(() => {
+    if (!selectedCinemaId || selectedCinemaShowtimeDateSet.has(selectedDate)) {
+      return;
+    }
+
+    const firstAvailableDate = next30Days.find((day) =>
+      selectedCinemaShowtimeDateSet.has(day)
+    );
+
+    if (firstAvailableDate) {
+      setSelectedDate(firstAvailableDate);
+    }
+  }, [next30Days, selectedCinemaId, selectedCinemaShowtimeDateSet, selectedDate]);
 
   const selectedSeatRows = seats.filter((seat) => selectedSeats.includes(seat.id));
 
@@ -518,10 +590,7 @@ const MovieDetailPage = () => {
                     placeholder="-- Chọn rạp phim --"
                     style={{ width: "100%" }}
                     optionFilterProp="label"
-                    options={cinemas.map((c) => ({
-                      value: c.id,
-                      label: `${c.name} (${c.city})${cinemasWithSlots.has(c.id) ? " (còn slot)" : ""}`,
-                    }))}
+                    options={cinemaOptions}
                     onChange={(val: number) => {
                       setSelectedCinemaId(val);
                       setSelectedShowtime(null);
@@ -557,14 +626,17 @@ const MovieDetailPage = () => {
                       <>
                         <div className="date-tabs" style={{ marginTop: 20 }}>
                           {next30Days.map((day) => {
+                            const hasShowtime = selectedCinemaShowtimeDateSet.has(day);
                             return (
                               <button
                                 key={day}
                                 id={`date-${day}`}
                                 className={[
                                   "date-tab-btn",
+                                  hasShowtime ? "has-showtime" : "disabled",
                                   selectedDate === day ? "active" : "",
                                 ].join(" ")}
+                                disabled={!hasShowtime}
                                 onClick={() => setSelectedDate(day)}
                               >
                                 {formatTabLabel(day)}

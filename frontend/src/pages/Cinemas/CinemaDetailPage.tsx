@@ -112,7 +112,13 @@ const CinemaDetailPage = () => {
     showtimesByDate.find((g) => g.date === selectedDate)?.showtimes ?? [];
 
   const handleShowtimeClick = (showtime: ApiShowtime) => {
-    navigate(`/movies/${showtime.movie_id}?showtime_id=${showtime.id}`);
+    const params = new URLSearchParams({
+      cinema_id: String(cinemaId),
+      date: selectedDate,
+      showtime_id: String(showtime.id),
+    });
+
+    navigate(`/movies/${showtime.movie_id}?${params.toString()}`);
   };
 
   if (loading) {
