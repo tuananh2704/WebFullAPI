@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { login, register, verifyRegister } from "../../services/authService";
+import { hasAdminAccess, login, register, verifyRegister } from "../../services/authService";
 
 const DEMO_ACCOUNTS = [
   { email: "a@gmail.com", name: "Nguyen Van A" },
@@ -136,8 +136,8 @@ const AuthPage = () => {
     setLoading(true);
     try {
       if (mode === "login") {
-        await login({ email: form.email, password: form.password });
-        navigate("/");
+        const data = await login({ email: form.email, password: form.password });
+        navigate(hasAdminAccess(data.user) ? "/admin" : "/");
       } else {
         const data = await register(form);
         setPendingEmail(data.email);

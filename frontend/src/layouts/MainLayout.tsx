@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { Crown, Film, LogOut, Search, UserRound } from "lucide-react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { getCurrentUser, logout } from "../services/authService";
+import { BarChart3, Film, LogOut, UserRound } from "lucide-react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { getCurrentUser, hasAdminAccess, logout } from "../services/authService";
 import type { ApiUser } from "../types/api";
 
 const getLastName = (fullName: string) => {
@@ -11,19 +11,25 @@ const getLastName = (fullName: string) => {
 
 const MainLayout = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState<ApiUser | null>(getCurrentUser());
+  const isAdminUser = hasAdminAccess(user);
 
-  // Listen for storage changes (login/logout from other tabs or same-page updates)
   useEffect(() => {
     const sync = () => setUser(getCurrentUser());
     window.addEventListener("storage", sync);
-    // Also poll every second to catch same-tab changes (login on AuthPage)
     const interval = setInterval(sync, 1000);
     return () => {
       window.removeEventListener("storage", sync);
       clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    if (isAdminUser && location.pathname !== "/admin") {
+      navigate("/admin", { replace: true });
+    }
+  }, [isAdminUser, location.pathname, navigate]);
 
   const handleLogout = () => {
     logout();
@@ -35,7 +41,7 @@ const MainLayout = () => {
     <div className="cinemax-shell">
       <header className="site-header">
         <div className="container header-inner">
-          <NavLink className="brand" to="/">
+          <NavLink className="brand" to={isAdminUser ? "/admin" : "/"}>
             <span className="brand-mark">
               <Film size={28} strokeWidth={2.5} />
             </span>
@@ -43,26 +49,30 @@ const MainLayout = () => {
           </NavLink>
 
           <nav className="main-nav" aria-label="Main navigation">
-            <NavLink to="/">Trang chủ</NavLink>
-            <NavLink to="/movies">Phim</NavLink>
-            <NavLink to="/cinemas">Rạp</NavLink>
-            <NavLink to="/bookings">Booking</NavLink>
-            {user && (
-              <NavLink to="/membership" className="nav-vip">
-                <Crown size={16} />
-                VIP
+            {isAdminUser ? (
+              <NavLink to="/admin">
+                <BarChart3 size={16} />
+                Admin
               </NavLink>
+            ) : (
+              <>
+                <NavLink to="/">Trang chủ</NavLink>
+                <NavLink to="/movies">Phim</NavLink>
+                <NavLink to="/cinemas">Rạp</NavLink>
+                <NavLink to="/bookings">Booking</NavLink>
+                {user && <NavLink to="/membership">VIP</NavLink>}
+              </>
             )}
           </nav>
 
           <div className="header-actions">
-            <NavLink className="icon-link" to="/movies" aria-label="Search">
-              <Search size={26} />
-            </NavLink>
-
             {user ? (
               <>
-                <NavLink className="user-name-link" to="/profile" title={user.email}>
+                <NavLink
+                  className="user-name-link"
+                  to={isAdminUser ? "/admin" : "/profile"}
+                  title={user.email}
+                >
                   <UserRound size={18} />
                   <span className="user-display-name">{getLastName(user.full_name)}</span>
                 </NavLink>

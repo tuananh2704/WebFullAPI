@@ -101,6 +101,10 @@ export const getCurrentUser = (): ApiUser | null => {
   }
 };
 
+export const hasAdminAccess = (user: ApiUser | null): boolean => {
+  return Boolean(user?.roles?.some((role) => role === "ADMIN" || role === "EMPLOYEE"));
+};
+
 export const isLoggedIn = (): boolean => {
   return Boolean(localStorage.getItem("accessToken"));
 };

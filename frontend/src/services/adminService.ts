@@ -1,8 +1,37 @@
 import type { ApiMovie, ApiResponse } from "../types/api";
 import apiClient from "./apiClient";
 
+export type AdminBooking = {
+  id: number;
+  booking_code: string;
+  total_amount: string | number;
+  booking_status: "PENDING" | "CONFIRMED" | "CANCELLED";
+  showtime_id: number;
+  start_time: string;
+  movie_title: string;
+  customer_name: string | null;
+  customer_email: string | null;
+  payment_method: string;
+  payment_status: "PENDING" | "SUCCESS" | "FAILED";
+};
+
 export const getDashboardStats = async () => {
   const response = await apiClient.get<ApiResponse<any>>("/admin/dashboard");
+  return response.data.data;
+};
+
+export const getAdminBookings = async () => {
+  const response = await apiClient.get<ApiResponse<AdminBooking[]>>("/admin/bookings");
+  return response.data.data;
+};
+
+export const updateAdminBookingStatus = async (
+  id: number,
+  status: AdminBooking["booking_status"]
+) => {
+  const response = await apiClient.patch<ApiResponse<AdminBooking>>(`/admin/bookings/${id}/status`, {
+    status,
+  });
   return response.data.data;
 };
 

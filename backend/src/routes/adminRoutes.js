@@ -11,6 +11,8 @@ router.use(authMiddleware);
 router.use(roleMiddleware("ADMIN", "EMPLOYEE"));
 
 router.get("/dashboard", adminController.getDashboardStatistics);
+router.get("/bookings", adminController.getAdminBookings);
+router.patch("/bookings/:id/status", adminController.updateBookingStatus);
 
 router.get("/movies", movieController.getMovies);
 router.get("/movies/:id", movieController.getMovieDetail);
