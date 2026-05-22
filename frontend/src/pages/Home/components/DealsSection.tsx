@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { deals } from "../homeData";
 
 const DealsSection = () => {
@@ -12,6 +13,15 @@ const DealsSection = () => {
               <div>
                 <h3>{deal.title}</h3>
                 <p>{deal.description}</p>
+                {deal.actionHref.startsWith("#") ? (
+                  <a className="deal-shortcut" href={deal.actionHref}>
+                    {deal.actionLabel}
+                  </a>
+                ) : (
+                  <Link className="deal-shortcut" to={deal.actionHref}>
+                    {deal.actionLabel}
+                  </Link>
+                )}
               </div>
             </article>
           ))}

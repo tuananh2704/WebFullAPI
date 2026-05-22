@@ -16,7 +16,7 @@ const mapApiMovieToMovie = (movie: ApiMovie, index: number): Movie => ({
   title: movie.title,
   status: movie.status,
   rating: String(movie.rating || "8.0"),
-  age: movie.status === "COMING_SOON" ? "T16" : "T13",
+  age: movie.age_rating || (movie.status === "COMING_SOON" ? "T16" : "T13"),
   duration: movie.duration ? `${movie.duration}min` : "120min",
   genres: movie.genres?.length ? movie.genres : ["Cinema"],
   image:

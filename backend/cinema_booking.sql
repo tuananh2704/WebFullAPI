@@ -216,6 +216,7 @@ CREATE TABLE movies (
     poster_url   VARCHAR(500),
     trailer_url  VARCHAR(500),
     language     VARCHAR(50),
+    age_rating   VARCHAR(10) NOT NULL DEFAULT 'T13',
     rating       DECIMAL(3,1),
     status       ENUM('COMING_SOON','NOW_SHOWING','ENDED') DEFAULT 'NOW_SHOWING'
 );
@@ -505,6 +506,7 @@ CREATE TABLE users (
     full_name     VARCHAR(100),
     email         VARCHAR(100) UNIQUE,
     phone         VARCHAR(20),
+    birth_date    DATE,
     password_hash VARCHAR(255),
     status        ENUM('ACTIVE','BLOCKED') DEFAULT 'ACTIVE'
 );
@@ -519,6 +521,7 @@ CREATE TABLE pending_users (
     full_name         VARCHAR(100),
     email             VARCHAR(100) UNIQUE NOT NULL,
     phone             VARCHAR(20),
+    birth_date        DATE,
     password_hash     VARCHAR(255) NOT NULL,
     verification_code CHAR(6) NOT NULL,
     status            ENUM('PENDING','VERIFIED','EXPIRED') DEFAULT 'PENDING',
@@ -1359,3 +1362,51 @@ CREATE INDEX idx_user_memberships_user    ON user_memberships(user_id);
 CREATE INDEX idx_user_memberships_tier    ON user_memberships(tier_id);
 CREATE INDEX idx_tier_history_user        ON membership_tier_history(user_id);
 CREATE INDEX idx_benefit_usage_user       ON membership_benefit_usage(user_id, benefit_key);
+USE cinema_booking;
+
+SET SQL_SAFE_UPDATES = 0;  -- ← disable safe mode
+
+UPDATE foods
+SET description = '1 bắp caramel M + 1 nước M',
+    image_url = 'combo1.jpg'
+WHERE name = 'Combo 1';
+
+UPDATE foods
+SET description = '1 bắp phô mai M + 1 bắp caramel M + 2 nước M',
+    image_url = 'combo2.jpg'
+WHERE name = 'Combo 2';
+
+-- ... rest of your INSERTs and UPDATEs ...
+
+UPDATE foods
+SET description = '2 bắp L vị caramel/phô mai + 4 nước M + 2 snack',
+    image_url = 'combo_family.jpg'
+WHERE name = 'Combo Family';
+
+SET SQL_SAFE_UPDATES = 1;  -- ← re-enable safe mode
+USE cinema_booking;
+
+ALTER TABLE users
+  ADD COLUMN birth_date DATE NULL AFTER phone;
+
+ALTER TABLE pending_users
+  ADD COLUMN birth_date DATE NULL AFTER phone;
+
+UPDATE users
+SET birth_date = '2000-01-01'
+WHERE birth_date IS NULL;
+
+ALTER TABLE movies
+  ADD COLUMN age_rating VARCHAR(10) NOT NULL DEFAULT 'T13' AFTER language;
+
+UPDATE movies
+SET age_rating = CASE
+  WHEN title LIKE '%Frozen%' THEN 'P'
+  WHEN title LIKE '%Inside Out%' THEN 'P'
+  WHEN title LIKE '%Doraemon%' THEN 'P'
+  WHEN title LIKE '%Conjuring%' THEN 'T18'
+  WHEN title LIKE '%Quiet Place%' THEN 'T16'
+  WHEN title LIKE '%Batman%' THEN 'T16'
+  WHEN title LIKE '%Deadpool%' THEN 'T18'
+  ELSE 'T13'
+END;

@@ -4,6 +4,58 @@ const membershipService = require("./membershipService");
 
 const generateBookingCode = () => `BK${Date.now()}`;
 
+const isTuesdayDate = (dateKey) => {
+  return new Date(`${dateKey}T00:00:00`).getDay() === 2;
+};
+
+const getMinimumAge = (ageRating) => {
+  const normalized = String(ageRating || "P").toUpperCase();
+  if (normalized === "P" || normalized === "K") return 0;
+  const match = normalized.match(/\d+/);
+  return match ? Number(match[0]) : 0;
+};
+
+const getAge = (birthDate, atDate = new Date()) => {
+  if (!birthDate) return null;
+  const birth = new Date(`${String(birthDate).slice(0, 10)}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return null;
+
+  let age = atDate.getFullYear() - birth.getFullYear();
+  const monthDiff = atDate.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && atDate.getDate() < birth.getDate())) {
+    age -= 1;
+  }
+
+  return age;
+};
+
+const getShowtimeMeta = async (connection, showtimeId) => {
+  const [rows] = await connection.execute(
+    `
+    SELECT
+      DATE_FORMAT(COALESCE(st.show_date, DATE(st.start_time)), '%Y-%m-%d') AS show_date,
+      COALESCE(m.age_rating, 'P') AS age_rating,
+      m.title AS movie_title
+    FROM showtimes st
+    JOIN movies m ON m.id = st.movie_id
+    WHERE st.id = ?
+    LIMIT 1
+    `,
+    [showtimeId]
+  );
+
+  return rows[0] || null;
+};
+
+const getUserBirthDate = async (connection, userId) => {
+  const [rows] = await connection.execute(
+    "SELECT birth_date FROM users WHERE id = ? LIMIT 1",
+    [userId]
+  );
+
+  return rows[0]?.birth_date || null;
+};
+
 const getSeatPrices = async (connection, showtimeId, seatIds) => {
   const placeholders = seatIds.map(() => "?").join(",");
   const [rows] = await connection.execute(
@@ -60,13 +112,30 @@ const createBooking = async ({ userId, showtime_id, seat_ids, foods = [], points
       throw new AppError("Invalid seat selection for this showtime", 400);
     }
 
+    const showtimeMeta = await getShowtimeMeta(connection, showtime_id);
+    if (!showtimeMeta) {
+      throw new AppError("Invalid showtime", 400);
+    }
+
+    const userAge = getAge(await getUserBirthDate(connection, userId));
+    const minimumAge = getMinimumAge(showtimeMeta.age_rating);
+    if (minimumAge > 0 && (userAge === null || userAge < minimumAge)) {
+      throw new AppError(
+        `Bạn chưa đủ ${minimumAge} tuổi để đặt vé phim ${showtimeMeta.age_rating}.`,
+        403
+      );
+    }
+
     const ticketTotal = seatPrices.reduce((sum, seat) => sum + Number(seat.price), 0);
+    const showtimeDate = showtimeMeta.show_date;
+    const tuesdayDiscount =
+      showtimeDate && isTuesdayDate(showtimeDate) ? Math.round(ticketTotal * 0.5) : 0;
 
     // Áp membership discount lên giá vé
     const { discount_amount: membershipDiscount } =
       await membershipService.calculateMembershipDiscount(userId, ticketTotal);
 
-    let totalAmount = ticketTotal - membershipDiscount;
+    let totalAmount = Math.max(ticketTotal - membershipDiscount - tuesdayDiscount, 0);
 
     const [bookingResult] = await connection.execute(
       `

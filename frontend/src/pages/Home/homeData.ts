@@ -17,6 +17,8 @@ export type Deal = {
   description: string;
   discount: string;
   variant: "tuesday" | "vip";
+  actionLabel: string;
+  actionHref: string;
 };
 
 // Poster phim thật từ TMDB CDN (portrait 2:3 ratio)
@@ -123,11 +125,15 @@ export const deals: Deal[] = [
     description: "Giảm 50% cho tất cả suất chiếu vào thứ 3",
     discount: "-50%",
     variant: "tuesday",
+    actionLabel: "Đặt vé thứ 3",
+    actionHref: "#booking",
   },
   {
     title: "Member VIP",
     description: "Ưu đãi đặc biệt cho thành viên VIP",
     discount: "-30%",
     variant: "vip",
+    actionLabel: "Xem VIP",
+    actionHref: "/membership",
   },
 ];

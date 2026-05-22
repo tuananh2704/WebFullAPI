@@ -32,6 +32,9 @@ type SelectedFoodItem = {
   quantity: number;
 };
 
+const COMBO_NAME_PATTERN = /^combo(?:\s*\d+|\s+family)$/i;
+const COMBO_IMAGE_COUNT = 4;
+
 const ROOM_TYPE_COLOR: Record<string, string> = {
   "2D": "#37474F",
   "3D": "#1565C0",
@@ -58,6 +61,61 @@ const getShowDate = (showtime: ApiShowtime) => {
   }
 
   return formatLocalDate(new Date(showtime.start_time));
+};
+
+const isTuesdayDateKey = (dateKey: string) => {
+  return new Date(`${dateKey}T00:00:00`).getDay() === 2;
+};
+
+const getMinimumAge = (ageRating?: string | null) => {
+  const normalized = String(ageRating || "P").toUpperCase();
+  if (normalized === "P" || normalized === "K") return 0;
+  const match = normalized.match(/\d+/);
+  return match ? Number(match[0]) : 0;
+};
+
+const calculateAge = (birthDate?: string | null) => {
+  if (!birthDate) return null;
+  const birth = new Date(`${birthDate}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age -= 1;
+  }
+
+  return age;
+};
+
+const getComboNumber = (name: string) => {
+  const match = name.match(/\d+/);
+  return match ? Number(match[0]) : Number.MAX_SAFE_INTEGER;
+};
+
+const getComboImage = (food?: ApiFood) => {
+  const imageUrl = food?.image_url?.trim();
+  const foodName = food?.name || "";
+
+  if (imageUrl && /^https?:\/\//i.test(imageUrl)) {
+    return imageUrl;
+  }
+
+  if (imageUrl?.startsWith("/")) {
+    return imageUrl;
+  }
+
+  if (/^combo\s+family$/i.test(foodName.trim())) {
+    return "/images/foods/combo-family.svg";
+  }
+
+  const comboNumber = getComboNumber(foodName);
+  const imageIndex = Number.isFinite(comboNumber)
+    ? ((comboNumber - 1) % COMBO_IMAGE_COUNT) + 1
+    : 1;
+
+  return `/images/foods/combo-${imageIndex}.svg`;
 };
 
 const generateNext30Days = (): string[] => {
@@ -121,6 +179,10 @@ const MovieDetailPage = () => {
 
   const loggedIn = isLoggedIn();
   const currentUser = getCurrentUser();
+  const minimumAge = getMinimumAge(movie?.age_rating);
+  const currentUserAge = calculateAge(currentUser?.birth_date);
+  const ageRestricted =
+    minimumAge > 0 && loggedIn && (currentUserAge === null || currentUserAge < minimumAge);
 
   // Determine current booking step
   const currentStep = ticketData
@@ -280,6 +342,23 @@ const MovieDetailPage = () => {
   const selectedSeatRows = seats.filter((seat) => selectedSeats.includes(seat.id));
 
   // Food helpers
+  const foodMap = useMemo(() => {
+    return new Map(foods.map((food) => [food.id, food]));
+  }, [foods]);
+
+  const comboFoodSizes = useMemo(() => {
+    return foodSizes
+      .filter((size) => COMBO_NAME_PATTERN.test(size.food_name.trim()))
+      .sort((a, b) => {
+        const comboNumberDiff = getComboNumber(a.food_name) - getComboNumber(b.food_name);
+        if (comboNumberDiff !== 0) {
+          return comboNumberDiff;
+        }
+
+        return String(a.size_name).localeCompare(String(b.size_name), "vi");
+      });
+  }, [foodSizes]);
+
   const handleAddFood = (sizeId: number) => {
     const size = foodSizes.find((s) => s.id === sizeId);
     if (!size) return;
@@ -330,9 +409,17 @@ const MovieDetailPage = () => {
     if (!membershipInfo || membershipInfo.tier.discount_percent === 0) return 0;
     return Math.round((seatTotal * membershipInfo.tier.discount_percent) / 100);
   }, [seatTotal, membershipInfo]);
+  const tuesdayDiscount = useMemo(() => {
+    if (!selectedShowtime || seatTotal === 0 || !isTuesdayDateKey(getShowDate(selectedShowtime))) {
+      return 0;
+    }
+
+    return Math.round(seatTotal * 0.5);
+  }, [seatTotal, selectedShowtime]);
 
   const totalBeforeDiscount = seatTotal + foodTotal;
-  const finalAmount = Math.max(totalBeforeDiscount - membershipDiscount - discount, 0);
+  const finalAmount = Math.max(totalBeforeDiscount - membershipDiscount - tuesdayDiscount - discount, 0);
+  const hasAppliedDiscounts = membershipDiscount > 0 || tuesdayDiscount > 0 || discount > 0;
 
   const handleChooseShowtime = async (showtime: ApiShowtime) => {
     setSelectedShowtime(showtime);
@@ -370,6 +457,11 @@ const MovieDetailPage = () => {
     }
     if (!selectedShowtime || selectedSeats.length === 0) {
       setMessage("⚠️ Chọn suất chiếu và ghế trước khi đặt vé.");
+      return;
+    }
+
+    if (ageRestricted) {
+      setMessage(`Bạn chưa đủ ${minimumAge} tuổi để đặt vé phim ${movie?.age_rating}.`);
       return;
     }
 
@@ -450,6 +542,7 @@ const MovieDetailPage = () => {
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
               {movie?.duration && <Tag color="blue">⏱ {movie.duration} phút</Tag>}
               {movie?.language && <Tag color="cyan">🌐 {movie.language}</Tag>}
+              {movie?.age_rating && <Tag color="red">{movie.age_rating}</Tag>}
               {movie?.rating && <Tag color="gold">⭐ {Number(movie.rating).toFixed(1)}</Tag>}
               {movie?.director && <Tag color="purple">🎬 {movie.director}</Tag>}
             </div>
@@ -470,6 +563,16 @@ const MovieDetailPage = () => {
             <Link to="/auth" className="primary-btn compact">
               Đăng nhập ngay
             </Link>
+          </div>
+        )}
+
+        {ageRestricted && (
+          <div className="auth-prompt-banner warning">
+            <span>
+              Phim này dành cho khán giả từ {minimumAge} tuổi.
+              Tài khoản của bạn hiện
+              {currentUserAge === null ? " chưa có ngày sinh hợp lệ" : ` ${currentUserAge} tuổi`}.
+            </span>
           </div>
         )}
 
@@ -759,16 +862,26 @@ const MovieDetailPage = () => {
                 <div className="checkout-row">
                   {/* Food */}
                   <div className="data-card">
-                    <h2>3. Đồ ăn & Nước uống</h2>
+                    <h2>3. Combo</h2>
                     <div className="food-selection-grid">
-                      {foodSizes.map((size) => {
+                      {comboFoodSizes.map((size) => {
+                        const food = foodMap.get(size.food_id);
                         const selected = selectedFoods.find((f) => f.sizeId === size.id);
                         return (
                           <div className="food-item" key={size.id}>
-                            <div className="food-item-info">
-                              <strong>{size.food_name}</strong>
-                              <small>Size {size.size_name}</small>
-                              <span className="food-item-price">{formatCurrency(size.price)}</span>
+                            <div className="food-item-main">
+                              <img
+                                className="food-item-image"
+                                src={getComboImage(food)}
+                                alt={size.food_name}
+                                loading="lazy"
+                              />
+                              <div className="food-item-info">
+                                <strong>{size.food_name}</strong>
+                                {food?.description && <small>{food.description}</small>}
+                                <small>Size {size.size_name}</small>
+                                <span className="food-item-price">{formatCurrency(size.price)}</span>
+                              </div>
                             </div>
                             <div className="food-item-actions">
                               <button
@@ -789,6 +902,9 @@ const MovieDetailPage = () => {
                           </div>
                         );
                       })}
+                      {comboFoodSizes.length === 0 && (
+                        <Empty description="Chưa có combo" style={{ color: "#888", marginTop: 16 }} />
+                      )}
                     </div>
                   </div>
 
@@ -805,16 +921,9 @@ const MovieDetailPage = () => {
                 {/* Payment summary */}
                 <div className="data-card payment-summary-card">
                   <h2>4. Thanh toán</h2>
-                  <div className="payment-line" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", width: "100%" }}>
-                      <span>Ghế ({selectedSeats.length})</span>
-                      <span>{formatCurrency(seatTotal)}</span>
-                    </div>
-                    {membershipDiscount > 0 && (
-                      <span className="muted" style={{ fontSize: 12 }}>
-                        (Đã giảm {membershipInfo?.tier.discount_percent}% với VIP {membershipInfo?.tier.name})
-                      </span>
-                    )}
+                  <div className="payment-line">
+                    <span>Ghế ({selectedSeats.length})</span>
+                    <span>{formatCurrency(seatTotal)}</span>
                   </div>
                   {selectedFoods.map((f) => (
                     <div className="payment-line" key={f.sizeId}>
@@ -822,12 +931,33 @@ const MovieDetailPage = () => {
                       <span>{formatCurrency(f.price * f.quantity)}</span>
                     </div>
                   ))}
-                  {discount > 0 && (
-                    <div className="payment-line discount">
-                      <span>Mã khuyến mãi</span>
-                      <span>-{formatCurrency(discount)}</span>
+
+                  {hasAppliedDiscounts && (
+                    <div className="payment-discount-list">
+                      <strong>Ưu đãi áp dụng</strong>
+                      {tuesdayDiscount > 0 && (
+                        <div className="payment-line payment-discount-line">
+                          <span>Thứ 3 vui vẻ - giảm 50% tiền vé</span>
+                          <span>-{formatCurrency(tuesdayDiscount)}</span>
+                        </div>
+                      )}
+                      {membershipDiscount > 0 && (
+                        <div className="payment-line payment-discount-line">
+                          <span>
+                            VIP {membershipInfo?.tier.name} - giảm {membershipInfo?.tier.discount_percent}% tiền vé
+                          </span>
+                          <span>-{formatCurrency(membershipDiscount)}</span>
+                        </div>
+                      )}
+                      {discount > 0 && (
+                        <div className="payment-line payment-discount-line">
+                          <span>Mã khuyến mãi</span>
+                          <span>-{formatCurrency(discount)}</span>
+                        </div>
+                      )}
                     </div>
                   )}
+
                   <div className="payment-divider" />
                   <div className="payment-line total">
                     <span>Tổng cộng</span>
@@ -837,7 +967,7 @@ const MovieDetailPage = () => {
                   <button
                     className="primary-btn form-submit pay-btn"
                     onClick={handlePayAndBook}
-                    disabled={!loggedIn || !selectedShowtime || selectedSeats.length === 0 || bookingLoading}
+                    disabled={!loggedIn || ageRestricted || !selectedShowtime || selectedSeats.length === 0 || bookingLoading}
                     style={{ width: "100%", marginTop: 16 }}
                   >
                     {bookingLoading ? (

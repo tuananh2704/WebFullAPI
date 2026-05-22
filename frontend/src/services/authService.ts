@@ -10,6 +10,7 @@ type RegisterPayload = {
   full_name: string;
   email: string;
   phone?: string;
+  birth_date: string;
   password: string;
 };
 
@@ -64,6 +65,7 @@ export const verifyRegister = async (payload: VerifyRegisterPayload) => {
 
 export const getProfile = async () => {
   const response = await apiClient.get<ApiResponse<ApiUser>>("/auth/profile");
+  localStorage.setItem("currentUser", JSON.stringify(response.data.data));
   return response.data.data;
 };
 

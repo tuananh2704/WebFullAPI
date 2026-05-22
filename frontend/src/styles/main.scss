@@ -1117,6 +1117,26 @@ select {
   line-height: 1.35;
 }
 
+.deal-shortcut {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  margin-top: 18px;
+  padding: 0 16px;
+  border-radius: 8px;
+  background: var(--red);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 800;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.deal-shortcut:hover {
+  background: #ff1823;
+  transform: translateY(-1px);
+}
+
 .discount {
   position: absolute;
   top: 21px;
@@ -1400,9 +1420,10 @@ select {
 
 .cinema-detail-layout {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: minmax(280px, 320px) minmax(0, 1fr);
   gap: 32px;
   align-items: start;
+  width: 100%;
 }
 
 .cinema-detail-left {
@@ -1412,6 +1433,7 @@ select {
   border-radius: 16px;
   background: #1a1a1a;
   padding: 24px;
+  min-width: 0;
 }
 
 .cinema-detail-right {
@@ -1419,6 +1441,8 @@ select {
   border-radius: 16px;
   background: #1a1a1a;
   padding: 28px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .cinema-rooms-list {
@@ -1431,6 +1455,7 @@ select {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 10px;
   padding: 10px 12px;
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.04);
@@ -1453,14 +1478,26 @@ select {
   display: flex;
   gap: 8px;
   overflow-x: auto;
-  padding-bottom: 4px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  overflow-y: hidden;
+  max-width: 100%;
+  padding-bottom: 10px;
   scroll-snap-type: x mandatory;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(229, 9, 20, 0.75) rgba(255, 255, 255, 0.08);
 }
 
 .date-tabs::-webkit-scrollbar {
-  display: none;
+  height: 8px;
+}
+
+.date-tabs::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.date-tabs::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(229, 9, 20, 0.75);
 }
 
 .date-tab-btn {
@@ -1550,7 +1587,7 @@ select {
 
 .showtime-btn-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
 }
 
@@ -1846,12 +1883,12 @@ select {
   }
 
   .cinema-detail-layout {
-    grid-template-columns: 280px 1fr;
+    grid-template-columns: minmax(260px, 280px) minmax(0, 1fr);
     gap: 24px;
   }
 
   .showtime-btn-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   }
 }
 
@@ -1884,7 +1921,7 @@ select {
   }
 
   .showtime-btn-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   }
 }
 
@@ -2275,14 +2312,40 @@ select {
   color: #ccc;
 }
 
-.payment-line.discount {
-  color: #81C784;
-}
-
 .payment-line.total {
   font-size: 18px;
   font-weight: 800;
   color: #fff;
+}
+
+.payment-discount-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(76, 175, 80, 0.08);
+  border: 1px solid rgba(129, 199, 132, 0.22);
+}
+
+.payment-discount-list strong {
+  font-size: 13px;
+  color: #d8f5da;
+}
+
+.payment-discount-line {
+  padding: 0;
+  color: #81C784;
+}
+
+.payment-discount-line span:first-child {
+  padding-right: 16px;
+}
+
+.payment-discount-line span:last-child {
+  flex-shrink: 0;
+  font-weight: 800;
 }
 
 .payment-divider {
@@ -2314,16 +2377,35 @@ select {
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.06);
   transition: background 160ms ease, border-color 160ms ease;
+  min-height: 104px;
 }
 
 .food-item:hover {
   background: rgba(255, 255, 255, 0.07);
 }
 
+.food-item-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.food-item-image {
+  width: 78px;
+  height: 78px;
+  flex: 0 0 78px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #111;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .food-item-info {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .food-item-info strong {
@@ -2335,6 +2417,7 @@ select {
 .food-item-info small {
   font-size: 12px;
   color: #999;
+  line-height: 1.35;
 }
 
 .food-item-price {
@@ -3137,6 +3220,8 @@ select {
 /* Profile Membership Card */
 .profile-membership-card {
   border: 1px solid var(--tier-color, rgba(255, 255, 255, 0.08)) !important;
+  padding: 24px;
+  overflow: hidden;
 
   h2 {
     display: flex;
@@ -3177,6 +3262,27 @@ select {
 
 .profile-membership-progress {
   margin-bottom: 20px;
+  min-width: 0;
+}
+
+.profile-membership-progress .tier-progress-header {
+  gap: 14px;
+}
+
+.profile-membership-progress .tier-progress-header span:first-child {
+  min-width: 0;
+}
+
+.profile-membership-progress .tier-progress-header span:last-child {
+  flex-shrink: 0;
+}
+
+.profile-membership-card .tier-progress-bar {
+  width: 100%;
+}
+
+.profile-membership-card .profile-action-btn {
+  max-width: 100%;
 }
 
 @media (max-width: 900px) {

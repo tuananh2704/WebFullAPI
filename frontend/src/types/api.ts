@@ -14,6 +14,7 @@ export type ApiMovie = {
   poster_url: string | null;
   trailer_url: string | null;
   language: string | null;
+  age_rating: string | null;
   rating: string | number | null;
   status: "COMING_SOON" | "NOW_SHOWING" | "ENDED";
   genres: string[];
@@ -87,6 +88,7 @@ export type ApiUser = {
   full_name: string;
   email: string;
   phone: string | null;
+  birth_date: string | null;
   status: string;
   roles: string[];
 };

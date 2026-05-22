@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Select, Tabs, Tag, Card, Button, Spin, Empty } from "antd";
+import { Select, Tag, Spin, Empty } from "antd";
 import { getCinemaById, getShowtimesByMovieAndCinema } from "../../services/cinemaService";
 import { getMovies } from "../../services/movieService";
 import type { ApiCinema, ApiMovie, ApiRoom, ApiShowtime, ShowtimeByDate } from "../../types/api";
-import { formatDateTime } from "../../utils/format";
 
 const BRAND_COLOR: Record<string, string> = {
   CGV: "#E50914",

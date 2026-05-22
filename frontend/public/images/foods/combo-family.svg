@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="Cinema combo family">
+  <defs>
+    <linearGradient id="bg" x1="18" x2="222" y1="18" y2="222" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#331a2f"/>
+      <stop offset="1" stop-color="#101010"/>
+    </linearGradient>
+    <linearGradient id="redCup" x1="166" x2="220" y1="70" y2="210" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff3039"/>
+      <stop offset="1" stop-color="#b80009"/>
+    </linearGradient>
+    <linearGradient id="blueCup" x1="126" x2="174" y1="86" y2="210" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2d8cff"/>
+      <stop offset="1" stop-color="#0f4da5"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="240" rx="28" fill="url(#bg)"/>
+  <ellipse cx="118" cy="205" rx="95" ry="18" fill="#090909" opacity=".6"/>
+  <circle cx="50" cy="76" r="17" fill="#ffd95a"/>
+  <circle cx="75" cy="62" r="20" fill="#ffe27a"/>
+  <circle cx="102" cy="75" r="18" fill="#ffd15a"/>
+  <circle cx="33" cy="99" r="17" fill="#ffe48a"/>
+  <circle cx="67" cy="101" r="22" fill="#ffd95a"/>
+  <circle cx="103" cy="102" r="20" fill="#ffe27a"/>
+  <path d="M27 96h96l-12 108H41L27 96z" fill="#f6f6f6"/>
+  <path d="M48 103h17l-4 101H44l4-101zM83 103h17l-4 101H79l4-101z" fill="#e50914"/>
+  <path d="M23 94h104v18H23z" fill="#fff"/>
+  <circle cx="105" cy="117" r="13" fill="#ffd95a"/>
+  <circle cx="128" cy="106" r="15" fill="#ffe27a"/>
+  <circle cx="151" cy="119" r="14" fill="#ffd15a"/>
+  <path d="M96 118h64l-8 86h-48l-8-86z" fill="#f2f2f2"/>
+  <path d="M112 124h12l-3 80h-12l3-80zM136 124h12l-3 80h-12l3-80z" fill="#e50914"/>
+  <path d="M128 88h48l-8 116h-31l-9-116z" fill="url(#blueCup)"/>
+  <path d="M124 77h56v16h-56z" fill="#f2f2f2"/>
+  <path d="M153 50l-6 42" stroke="#f2f2f2" stroke-width="7" stroke-linecap="round"/>
+  <path d="M167 72h49l-8 132h-33l-8-132z" fill="url(#redCup)"/>
+  <path d="M162 60h59v17h-59z" fill="#f2f2f2"/>
+  <path d="M198 39l-8 45" stroke="#f2f2f2" stroke-width="7" stroke-linecap="round"/>
+  <path d="M137 167h74l-11 34h-54l-9-34z" fill="#f4a23a"/>
+  <path d="M144 166c17 10 39 10 61 0" stroke="#ffd47b" stroke-width="7" stroke-linecap="round"/>
+  <text x="74" y="159" fill="#111" font-family="Arial, sans-serif" font-size="22" font-weight="800" text-anchor="middle">FAM</text>
+</svg>

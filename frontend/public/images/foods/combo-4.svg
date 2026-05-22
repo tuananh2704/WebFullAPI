@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" role="img" aria-label="Cinema combo 4">
+  <defs>
+    <linearGradient id="bg" x1="18" x2="222" y1="22" y2="224" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#172b24"/>
+      <stop offset="1" stop-color="#101010"/>
+    </linearGradient>
+    <linearGradient id="cup" x1="159" x2="213" y1="54" y2="204" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff3039"/>
+      <stop offset="1" stop-color="#b80009"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="240" rx="28" fill="url(#bg)"/>
+  <circle cx="52" cy="68" r="17" fill="#ffd95a"/>
+  <circle cx="78" cy="55" r="20" fill="#ffe27a"/>
+  <circle cx="105" cy="68" r="18" fill="#ffd15a"/>
+  <circle cx="34" cy="92" r="17" fill="#ffe48a"/>
+  <circle cx="68" cy="94" r="22" fill="#ffd95a"/>
+  <circle cx="103" cy="96" r="20" fill="#ffe27a"/>
+  <path d="M28 90h96l-12 112H42L28 90z" fill="#f6f6f6"/>
+  <path d="M49 98h17l-4 104H45l4-104zM83 98h17l-4 104H79l4-104z" fill="#e50914"/>
+  <path d="M24 88h104v18H24z" fill="#fff"/>
+  <circle cx="130" cy="86" r="14" fill="#ffe27a"/>
+  <circle cx="149" cy="76" r="15" fill="#ffd15a"/>
+  <circle cx="168" cy="88" r="14" fill="#ffe48a"/>
+  <path d="M121 88h55l-7 81h-41l-7-81z" fill="#f2f2f2"/>
+  <path d="M134 94h10l-3 75h-10l3-75zM153 94h10l-3 75h-10l3-75z" fill="#2d8cff"/>
+  <path d="M156 66h50l-8 136h-34L156 66z" fill="url(#cup)"/>
+  <path d="M151 54h60v17h-60z" fill="#f2f2f2"/>
+  <path d="M181 33l-7 45" stroke="#f2f2f2" stroke-width="7" stroke-linecap="round"/>
+  <path d="M137 172h72l-10 28h-54l-8-28z" fill="#f4a23a"/>
+  <path d="M143 171c17 9 39 9 60 0" stroke="#ffd47b" stroke-width="7" stroke-linecap="round"/>
+  <text x="78" y="154" fill="#111" font-family="Arial, sans-serif" font-size="30" font-weight="800" text-anchor="middle">4</text>
+</svg>

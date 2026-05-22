@@ -4,7 +4,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const { requireFields } = require("../utils/validators");
 
 const register = asyncHandler(async (req, res) => {
-  requireFields(req.body, ["full_name", "email", "password"]);
+  requireFields(req.body, ["full_name", "email", "birth_date", "password"]);
   const data = await authService.register(req.body);
   return successResponse(res, "OTP created successfully", data, 201);
 });

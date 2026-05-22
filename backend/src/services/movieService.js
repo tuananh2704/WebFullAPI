@@ -4,7 +4,7 @@ const AppError = require("../utils/AppError");
 const movieSelect = `
   SELECT
     m.id, m.title, m.description, m.director, m.duration, m.release_date, m.poster_url,
-    m.trailer_url, m.language, m.rating, m.status,
+    m.trailer_url, m.language, m.age_rating, m.rating, m.status,
     COALESCE(JSON_ARRAYAGG(g.name), JSON_ARRAY()) AS genres
   FROM movies m
   LEFT JOIN movie_genres mg ON mg.movie_id = m.id
@@ -150,8 +150,8 @@ const getMovieById = async (movieId) => {
 const createMovie = async (movie) => {
   const [result] = await pool.execute(
     `
-    INSERT INTO movies(title, description, director, duration, release_date, poster_url, trailer_url, language, rating, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO movies(title, description, director, duration, release_date, poster_url, trailer_url, language, age_rating, rating, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       movie.title,
@@ -162,6 +162,7 @@ const createMovie = async (movie) => {
       movie.poster_url || null,
       movie.trailer_url || null,
       movie.language || null,
+      movie.age_rating || "T13",
       movie.rating || null,
       movie.status || "NOW_SHOWING",
     ]
@@ -184,6 +185,7 @@ const updateMovie = async (movieId, movie) => {
         poster_url = COALESCE(?, poster_url),
         trailer_url = COALESCE(?, trailer_url),
         language = COALESCE(?, language),
+        age_rating = COALESCE(?, age_rating),
         rating = COALESCE(?, rating),
         status = COALESCE(?, status)
     WHERE id = ?
@@ -197,6 +199,7 @@ const updateMovie = async (movieId, movie) => {
       movie.poster_url || null,
       movie.trailer_url || null,
       movie.language || null,
+      movie.age_rating || null,
       movie.rating || null,
       movie.status || null,
       movieId,

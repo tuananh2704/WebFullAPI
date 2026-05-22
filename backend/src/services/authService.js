@@ -9,15 +9,22 @@ const OTP_TTL_SECONDS = 5 * 60;
 let pendingUsersTableReady = false;
 
 const publicUserFields = `
-  u.id, u.full_name, u.email, u.phone, u.status,
+  u.id, u.full_name, u.email, u.phone, u.birth_date, u.status,
   COALESCE(JSON_ARRAYAGG(r.name), JSON_ARRAY()) AS roles
 `;
+
+const formatDateOnly = (value) => {
+  if (!value) return null;
+  if (typeof value === "string") return value.slice(0, 10);
+  return value.toISOString().slice(0, 10);
+};
 
 const normalizeUser = (user) => ({
   id: user.id,
   full_name: user.full_name,
   email: user.email,
   phone: user.phone,
+  birth_date: formatDateOnly(user.birth_date),
   status: user.status,
   roles: (typeof user.roles === "string" ? JSON.parse(user.roles) : user.roles).filter(Boolean),
 });
@@ -63,6 +70,7 @@ const ensurePendingUsersTable = async () => {
       full_name VARCHAR(100) NOT NULL,
       email VARCHAR(100) NOT NULL UNIQUE,
       phone VARCHAR(20),
+      birth_date DATE,
       password_hash VARCHAR(255) NOT NULL,
       verification_code VARCHAR(6) NOT NULL,
       expires_at DATETIME NOT NULL,
@@ -99,12 +107,16 @@ const schedulePendingUserDeletion = (email, verificationCode) => {
   }, OTP_TTL_SECONDS * 1000).unref();
 };
 
-const register = async ({ full_name, email, phone, password }) => {
+const register = async ({ full_name, email, phone, birth_date, password }) => {
   await cleanupExpiredPendingUsers();
 
   const existingUser = await findUserByEmail(email);
   if (existingUser) {
     throw new AppError("Email already exists", 409);
+  }
+
+  if (!birth_date || Number.isNaN(new Date(`${birth_date}T00:00:00`).getTime())) {
+    throw new AppError("Ngày sinh không hợp lệ", 400);
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
@@ -113,18 +125,19 @@ const register = async ({ full_name, email, phone, password }) => {
   await pool.execute(
     `
     INSERT INTO pending_users(
-      full_name, email, phone, password_hash, verification_code, expires_at
+      full_name, email, phone, birth_date, password_hash, verification_code, expires_at
     )
-    VALUES (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))
+    VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))
     ON DUPLICATE KEY UPDATE
       full_name = VALUES(full_name),
       phone = VALUES(phone),
+      birth_date = VALUES(birth_date),
       password_hash = VALUES(password_hash),
       verification_code = VALUES(verification_code),
       expires_at = VALUES(expires_at),
       created_at = CURRENT_TIMESTAMP
     `,
-    [full_name, email, phone || null, passwordHash, verificationCode, OTP_TTL_SECONDS]
+    [full_name, email, phone || null, birth_date, passwordHash, verificationCode, OTP_TTL_SECONDS]
   );
 
   try {
@@ -180,10 +193,16 @@ const verifyRegister = async ({ email, verification_code }) => {
 
     const [result] = await connection.execute(
       `
-      INSERT INTO users(full_name, email, phone, password_hash, status)
-      VALUES (?, ?, ?, ?, 'ACTIVE')
+      INSERT INTO users(full_name, email, phone, birth_date, password_hash, status)
+      VALUES (?, ?, ?, ?, ?, 'ACTIVE')
       `,
-      [pendingUser.full_name, pendingUser.email, pendingUser.phone, pendingUser.password_hash]
+      [
+        pendingUser.full_name,
+        pendingUser.email,
+        pendingUser.phone,
+        pendingUser.birth_date,
+        pendingUser.password_hash,
+      ]
     );
 
     const [roles] = await connection.execute("SELECT id FROM roles WHERE name = 'CUSTOMER' LIMIT 1");

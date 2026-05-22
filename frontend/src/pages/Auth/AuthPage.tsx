@@ -28,6 +28,7 @@ const AuthPage = () => {
     full_name: "",
     email: "",
     phone: "",
+    birth_date: "",
     password: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -88,6 +89,11 @@ const AuthPage = () => {
       }
       if (form.phone && !/^0\d{9}$/.test(form.phone)) {
         errs.phone = "Số điện thoại phải bắt đầu bằng 0 và có 10 chữ số";
+      }
+      if (!form.birth_date) {
+        errs.birth_date = "Vui lòng nhập ngày sinh";
+      } else if (new Date(`${form.birth_date}T00:00:00`) > new Date()) {
+        errs.birth_date = "Ngày sinh không hợp lệ";
       }
     }
 
@@ -277,6 +283,19 @@ const AuthPage = () => {
                           className={errors.phone ? "input-error" : ""}
                         />
                         {errors.phone && <span className="field-error">{errors.phone}</span>}
+                      </div>
+                      <div className="form-field">
+                        <label htmlFor="birth_date">Ngày sinh *</label>
+                        <input
+                          id="birth_date"
+                          type="date"
+                          value={form.birth_date}
+                          onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
+                          className={errors.birth_date ? "input-error" : ""}
+                        />
+                        {errors.birth_date && (
+                          <span className="field-error">{errors.birth_date}</span>
+                        )}
                       </div>
                     </>
                   )}

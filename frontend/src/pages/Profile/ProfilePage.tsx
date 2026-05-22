@@ -2,6 +2,7 @@ import React, { FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   BadgeCheck,
+  CalendarDays,
   Crown,
   KeyRound,
   LogOut,
@@ -20,6 +21,26 @@ import {
 import { getMyMembership } from "../../services/membershipService";
 import { formatCurrency } from "../../utils/format";
 import type { ApiUser, ApiMembershipInfo } from "../../types/api";
+
+const calculateAge = (birthDate: string | null) => {
+  if (!birthDate) return null;
+  const birth = new Date(`${birthDate}T00:00:00`);
+  if (Number.isNaN(birth.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age -= 1;
+  }
+
+  return age;
+};
+
+const formatBirthDate = (birthDate: string | null) => {
+  if (!birthDate) return "Chưa cập nhật";
+  return new Intl.DateTimeFormat("vi-VN").format(new Date(`${birthDate}T00:00:00`));
+};
 
 const ProfilePage = () => {
   const navigate = useNavigate();
@@ -260,6 +281,16 @@ const ProfilePage = () => {
                   <UserRound size={20} />
                   <span>Họ tên</span>
                   <strong>{profile.full_name}</strong>
+                </div>
+                <div>
+                  <CalendarDays size={20} />
+                  <span>Ngày sinh</span>
+                  <strong>
+                    {formatBirthDate(profile.birth_date)}
+                    {calculateAge(profile.birth_date) !== null
+                      ? ` (${calculateAge(profile.birth_date)} tuổi)`
+                      : ""}
+                  </strong>
                 </div>
                 <div>
                   <ShieldCheck size={20} />
