@@ -119,7 +119,7 @@ const createBooking = async ({ userId, showtime_id, seat_ids, foods = [], points
 
     const userAge = getAge(await getUserBirthDate(connection, userId));
     const minimumAge = getMinimumAge(showtimeMeta.age_rating);
-    if (minimumAge > 0 && (userAge === null || userAge < minimumAge)) {
+    if (minimumAge > 0 && userAge !== null && userAge < minimumAge) {
       throw new AppError(
         `Bạn chưa đủ ${minimumAge} tuổi để đặt vé phim ${showtimeMeta.age_rating}.`,
         403
@@ -262,7 +262,7 @@ const getBookingDetail = async (bookingId, userId, isAdmin = false) => {
 
   const [payments] = await pool.execute(
     `
-    SELECT id, payment_method, amount, payment_status
+    SELECT id, payment_method, amount, payment_status, transfer_content
     FROM payments
     WHERE booking_id = ?
     `,

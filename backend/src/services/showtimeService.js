@@ -61,13 +61,33 @@ const getShowtimeById = async (showtimeId) => {
   return rows[0];
 };
 
+const getDatePart = (dateTime) => String(dateTime || "").slice(0, 10);
+
+const getWeekNumber = (dateKey) => {
+  const showDate = new Date(`${dateKey}T00:00:00`);
+  if (Number.isNaN(showDate.getTime())) {
+    return 0;
+  }
+
+  const today = new Date();
+  const currentWeekStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  currentWeekStart.setDate(currentWeekStart.getDate() - ((currentWeekStart.getDay() + 6) % 7));
+  currentWeekStart.setHours(0, 0, 0, 0);
+
+  const diffMs = showDate.getTime() - currentWeekStart.getTime();
+  return Math.max(0, Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)));
+};
+
 const createShowtime = async ({ movie_id, room_id, start_time, end_time, status }) => {
+  const showDate = getDatePart(start_time);
+  const weekNumber = getWeekNumber(showDate);
+
   const [result] = await pool.execute(
     `
-    INSERT INTO showtimes(movie_id, room_id, start_time, end_time, status)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO showtimes(movie_id, room_id, show_date, week_number, start_time, end_time, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
-    [movie_id, room_id, start_time, end_time, status || "OPEN"]
+    [movie_id, room_id, showDate, weekNumber, start_time, end_time, status || "OPEN"]
   );
 
   return getShowtimeById(result.insertId);
@@ -75,11 +95,16 @@ const createShowtime = async ({ movie_id, room_id, start_time, end_time, status 
 
 const updateShowtime = async (showtimeId, data) => {
   await getShowtimeById(showtimeId);
+  const showDate = data.start_time ? getDatePart(data.start_time) : null;
+  const weekNumber = showDate ? getWeekNumber(showDate) : null;
+
   await pool.execute(
     `
     UPDATE showtimes
     SET movie_id = COALESCE(?, movie_id),
         room_id = COALESCE(?, room_id),
+        show_date = COALESCE(?, show_date),
+        week_number = COALESCE(?, week_number),
         start_time = COALESCE(?, start_time),
         end_time = COALESCE(?, end_time),
         status = COALESCE(?, status)
@@ -88,6 +113,8 @@ const updateShowtime = async (showtimeId, data) => {
     [
       data.movie_id || null,
       data.room_id || null,
+      showDate,
+      weekNumber,
       data.start_time || null,
       data.end_time || null,
       data.status || null,

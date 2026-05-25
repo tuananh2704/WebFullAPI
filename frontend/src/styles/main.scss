@@ -511,6 +511,17 @@ label {
   font-weight: 700;
 }
 
+.form-field {
+  display: grid;
+  gap: 8px;
+}
+
+.form-field span {
+  color: #cfcfcf;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 input,
 select {
   width: 100%;
@@ -696,6 +707,12 @@ select {
 
 .admin-refresh {
   flex-shrink: 0;
+}
+
+.admin-alert {
+  margin: 18px 0;
+  border-radius: 8px;
+  font-weight: 800;
 }
 
 .admin-tabs {
@@ -2490,6 +2507,26 @@ select {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
+.movie-trailer-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  margin-top: 14px;
+  padding: 0 18px;
+  border-radius: 8px;
+  border: 1px solid rgba(242, 7, 18, 0.55);
+  background: rgba(242, 7, 18, 0.12);
+  color: var(--red);
+  font-weight: 900;
+  text-decoration: none;
+}
+
+.movie-trailer-link:hover {
+  background: var(--red);
+  color: #fff;
+}
+
 /* =====================================================================
    BOOKING FLOW LAYOUT (2 columns)
    ===================================================================== */
@@ -4266,4 +4303,192 @@ select {
   .points-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* =====================================================================
+   PAYMENT QR MODAL
+   ===================================================================== */
+
+.payment-qr-modal .ant-modal-content {
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 0;
+}
+
+.payment-modal-content {
+  padding: 28px 24px;
+}
+
+.payment-modal-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.payment-modal-header h2 {
+  font-size: 22px;
+  font-weight: 900;
+  color: #fff;
+  margin: 0 0 6px;
+}
+
+.payment-modal-header .muted {
+  font-size: 13px;
+  color: #999;
+}
+
+/* Booking summary inside modal */
+.payment-modal-summary {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-bottom: 20px;
+}
+
+.payment-modal-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  font-size: 13px;
+}
+
+.payment-modal-info-row:last-child {
+  border-bottom: none;
+}
+
+.payment-modal-info-row span {
+  color: #999;
+  flex-shrink: 0;
+  margin-right: 12px;
+}
+
+.payment-modal-info-row strong {
+  color: #eee;
+  font-weight: 700;
+  text-align: right;
+  word-break: break-word;
+}
+
+.payment-modal-info-row.total {
+  padding-top: 10px;
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: none;
+}
+
+.payment-modal-info-row.total strong {
+  font-size: 18px;
+  font-weight: 900;
+  color: #e50914;
+}
+
+/* QR Code section */
+.payment-qr-section {
+  display: flex;
+  justify-content: center;
+  padding: 16px 0;
+}
+
+.payment-qr-image {
+  width: 240px;
+  height: auto;
+  border-radius: 14px;
+  background: #fff;
+  padding: 8px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* Bank info */
+.payment-bank-info {
+  background: linear-gradient(135deg, rgba(30, 60, 120, 0.25), rgba(20, 40, 80, 0.15));
+  border: 1px solid rgba(66, 133, 244, 0.3);
+  border-radius: 14px;
+  padding: 16px 18px;
+  margin-top: 16px;
+}
+
+.bank-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 14px;
+}
+
+.bank-info-row:last-child {
+  border-bottom: none;
+}
+
+.bank-info-row span {
+  color: #aaa;
+  flex-shrink: 0;
+}
+
+.bank-info-row strong {
+  color: #fff;
+  font-weight: 700;
+}
+
+.bank-info-row .account-number {
+  font-family: monospace;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #4fc3f7;
+}
+
+.bank-info-row .transfer-amount {
+  font-size: 16px;
+  font-weight: 900;
+  color: #66bb6a;
+}
+
+.bank-info-row.transfer-content-row {
+  padding-top: 10px;
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.transfer-content-value {
+  font-family: monospace;
+  font-size: 18px;
+  font-weight: 900;
+  color: #ffd740;
+  letter-spacing: 0.05em;
+  background: rgba(255, 215, 64, 0.1);
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 215, 64, 0.4);
+}
+
+/* Note */
+.payment-modal-note {
+  text-align: center;
+  font-size: 12px;
+  color: #f5a623;
+  margin-top: 14px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(245, 166, 35, 0.08);
+  border: 1px solid rgba(245, 166, 35, 0.2);
+}
+
+/* Admin transfer content badge */
+.admin-transfer-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255, 215, 64, 0.1);
+  border: 1px solid rgba(255, 215, 64, 0.25);
+  color: #ffd740;
+  font-family: monospace;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
 }

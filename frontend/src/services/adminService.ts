@@ -13,6 +13,7 @@ export type AdminBooking = {
   customer_email: string | null;
   payment_method: string;
   payment_status: "PENDING" | "SUCCESS" | "FAILED";
+  transfer_content: string | null;
 };
 
 export const getDashboardStats = async () => {

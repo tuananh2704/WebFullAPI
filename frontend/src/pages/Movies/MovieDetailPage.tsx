@@ -175,14 +175,16 @@ const MovieDetailPage = () => {
 
   // Ticket state — after successful booking + payment
   const [ticketData, setTicketData] = useState<any>(null);
-  const [showTicketModal, setShowTicketModal] = useState(false);
+  // Payment modal state
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [transferContent, setTransferContent] = useState("");
 
   const loggedIn = isLoggedIn();
   const currentUser = getCurrentUser();
   const minimumAge = getMinimumAge(movie?.age_rating);
   const currentUserAge = calculateAge(currentUser?.birth_date);
   const ageRestricted =
-    minimumAge > 0 && loggedIn && (currentUserAge === null || currentUserAge < minimumAge);
+    minimumAge > 0 && loggedIn && currentUserAge !== null && currentUserAge < minimumAge;
 
   // Determine current booking step
   const currentStep = ticketData
@@ -450,6 +452,17 @@ const MovieDetailPage = () => {
     }
   };
 
+  // Generate random transfer content
+  const generateTransferContent = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let code = '';
+    for (let i = 0; i < 8; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `CK ${code}`;
+  };
+
+  // Create the pending booking first, then show transfer instructions.
   const handlePayAndBook = async () => {
     if (!loggedIn) {
       setMessage("⚠️ Bạn cần đăng nhập trước khi đặt vé.");
@@ -474,20 +487,34 @@ const MovieDetailPage = () => {
         quantity: f.quantity,
       }));
 
-      // Step 1: Create booking
+      // Step 1: Create booking (stays PENDING)
       const booking: any = await createBooking({
         showtime_id: selectedShowtime.id,
         seat_ids: selectedSeats,
         foods: foodPayload,
       });
 
-      // Step 2: Auto-pay (demo mode)
-      await createPayment({ booking_id: booking.id, payment_method: "MOMO", amount: finalAmount });
+      const nextTransferContent = `CK ${booking.booking_code || generateTransferContent()}`;
+      setTransferContent(nextTransferContent);
+      setTicketData(booking);
+      setShowPaymentModal(true);
 
-      // Step 3: Fetch detailed ticket info
-      const detail = await getBookingDetail(booking.id);
-      setTicketData(detail);
-      setShowTicketModal(true);
+      try {
+        // Step 2: Create payment as BANK_TRANSFER (stays PENDING, no auto-confirm).
+        await createPayment({
+          booking_id: booking.id,
+          payment_method: "BANK_TRANSFER",
+          amount: finalAmount,
+          transfer_content: nextTransferContent,
+        });
+
+        const detail = await getBookingDetail(booking.id);
+        setTicketData(detail);
+      } catch {
+        setMessage(
+          "Đơn đã được lưu ở trạng thái chờ duyệt. Nếu admin chưa thấy nội dung chuyển khoản, hãy chạy migration BANK_TRANSFER."
+        );
+      }
     } catch (error: any) {
       setMessage(error.response?.data?.message || "Không tạo được booking.");
     } finally {
@@ -495,9 +522,12 @@ const MovieDetailPage = () => {
     }
   };
 
+  const handleConfirmTransfer = () => {
+    setShowPaymentModal(false);
+  };
+
   const handleNewBooking = () => {
     setTicketData(null);
-    setShowTicketModal(false);
     setSelectedSeats([]);
     setDiscount(0);
     setPromotionCode("");
@@ -553,6 +583,16 @@ const MovieDetailPage = () => {
                 ))}
               </div>
             )}
+            {movie?.trailer_url && (
+              <a
+                className="movie-trailer-link"
+                href={movie.trailer_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Xem trailer
+              </a>
+            )}
           </div>
         </div>
 
@@ -599,13 +639,15 @@ const MovieDetailPage = () => {
 
         {message && <p className="section-state warning">{message}</p>}
 
-        {/* Ticket already booked — success state */}
+        {/* Ticket already booked — pending approval state */}
         {ticketData && (
           <div className="ticket-success-section">
             <Result
-              status="success"
-              title="🎉 Đặt vé thành công!"
-              subTitle={`Mã booking: ${ticketData.booking_code}`}
+              status={ticketData.booking_status === "CONFIRMED" ? "success" : "info"}
+              title={ticketData.booking_status === "CONFIRMED" ? "🎉 Đặt vé thành công!" : "⏳ Đơn hàng đang chờ duyệt"}
+              subTitle={ticketData.booking_status === "CONFIRMED"
+                ? `Mã booking: ${ticketData.booking_code}`
+                : `Mã booking: ${ticketData.booking_code} — Vui lòng chờ admin xác nhận thanh toán`}
             />
             <div className="ticket-card">
               <div className="ticket-card-header">
@@ -662,9 +704,19 @@ const MovieDetailPage = () => {
                 </div>
                 <div className="ticket-row">
                   <span className="ticket-label">Trạng thái</span>
-                  <Tag color="green" style={{ fontWeight: 700, fontSize: 13 }}>
-                    ✅ {ticketData.booking_status}
-                  </Tag>
+                  {ticketData.booking_status === "CONFIRMED" ? (
+                    <Tag color="green" style={{ fontWeight: 700, fontSize: 13 }}>
+                      ✅ Đã duyệt
+                    </Tag>
+                  ) : ticketData.booking_status === "CANCELLED" ? (
+                    <Tag color="red" style={{ fontWeight: 700, fontSize: 13 }}>
+                      ❌ Đã hủy
+                    </Tag>
+                  ) : (
+                    <Tag color="orange" style={{ fontWeight: 700, fontSize: 13 }}>
+                      ⏳ Chờ duyệt
+                    </Tag>
+                  )}
                 </div>
               </div>
             </div>
@@ -975,16 +1027,114 @@ const MovieDetailPage = () => {
                     ) : !loggedIn ? (
                       <>🔐 Đăng nhập để thanh toán</>
                     ) : (
-                      <>🎟 Thanh toán & Đặt vé</>
+                      <>🎟 Thanh toán chuyển khoản</>
                     )}
                   </button>
                   <p className="muted" style={{ textAlign: "center", marginTop: 8, fontSize: 12 }}>
-                    Demo mode — Bấm nút là thanh toán thành công
+                    Chuyển khoản ngân hàng — Chờ admin duyệt
                   </p>
                 </div>
               </div>
           </div>
         )}
+
+        {/* Payment Modal with QR Code */}
+        <Modal
+          open={showPaymentModal}
+          onCancel={() => setShowPaymentModal(false)}
+          footer={null}
+          centered
+          width={520}
+          className="payment-qr-modal"
+          title={null}
+        >
+          <div className="payment-modal-content">
+            <div className="payment-modal-header">
+              <h2>💳 Thanh toán chuyển khoản</h2>
+              <p className="muted">Quét mã QR hoặc chuyển khoản theo thông tin bên dưới</p>
+            </div>
+
+            {/* Booking summary */}
+            <div className="payment-modal-summary">
+              <div className="payment-modal-info-row">
+                <span>🎬 Phim</span>
+                <strong>{movie?.title}</strong>
+              </div>
+              {selectedShowtime && (
+                <>
+                  <div className="payment-modal-info-row">
+                    <span>🏢 Rạp</span>
+                    <strong>{selectedShowtime.cinema_name}</strong>
+                  </div>
+                  <div className="payment-modal-info-row">
+                    <span>🚪 Phòng</span>
+                    <strong>{selectedShowtime.room_name} ({selectedShowtime.room_type})</strong>
+                  </div>
+                  <div className="payment-modal-info-row">
+                    <span>🕐 Giờ chiếu</span>
+                    <strong>{new Date(selectedShowtime.start_time).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}</strong>
+                  </div>
+                </>
+              )}
+              <div className="payment-modal-info-row">
+                <span>💺 Ghế</span>
+                <strong>{selectedSeatRows.map(s => `${s.seat_row}${s.seat_number}`).join(", ")}</strong>
+              </div>
+              {selectedFoods.length > 0 && (
+                <div className="payment-modal-info-row">
+                  <span>🍿 Combo</span>
+                  <strong>{selectedFoods.map(f => `${f.food_name} (${f.size_name}) x${f.quantity}`).join(", ")}</strong>
+                </div>
+              )}
+              <div className="payment-modal-info-row total">
+                <span>💰 Tổng tiền</span>
+                <strong>{formatCurrency(finalAmount)}</strong>
+              </div>
+            </div>
+
+            {/* QR Code */}
+            <div className="payment-qr-section">
+              <img
+                src={`https://img.vietqr.io/image/MB-123408052006-compact2.png?amount=${finalAmount}&addInfo=${encodeURIComponent(transferContent)}&accountName=CINEMAX`}
+                alt="QR Chuyển khoản MBBank"
+                className="payment-qr-image"
+              />
+            </div>
+
+            {/* Bank info */}
+            <div className="payment-bank-info">
+              <div className="bank-info-row">
+                <span>🏦 Ngân hàng</span>
+                <strong>MBBank</strong>
+              </div>
+              <div className="bank-info-row">
+                <span>📋 Số tài khoản</span>
+                <strong className="account-number">123408052006</strong>
+              </div>
+              <div className="bank-info-row">
+                <span>💰 Số tiền</span>
+                <strong className="transfer-amount">{formatCurrency(finalAmount)}</strong>
+              </div>
+              <div className="bank-info-row transfer-content-row">
+                <span>📝 Nội dung CK</span>
+                <strong className="transfer-content-value">{transferContent}</strong>
+              </div>
+            </div>
+
+            <p className="payment-modal-note">
+              ⚠️ Vui lòng chuyển <strong>đúng số tiền</strong> và <strong>đúng nội dung</strong> để được duyệt nhanh nhất.
+            </p>
+
+            <button
+              className="primary-btn form-submit pay-btn"
+              onClick={handleConfirmTransfer}
+              disabled={bookingLoading}
+              style={{ width: "100%", marginTop: 12 }}
+            >
+              {bookingLoading ? "⏳ Đang xử lý..." : "✅ Tôi đã chuyển khoản"}
+            </button>
+          </div>
+        </Modal>
       </div>
     </section>
   );

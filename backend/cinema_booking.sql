@@ -690,9 +690,10 @@ INSERT INTO tickets(booking_id, qr_code, checked_in) VALUES
 CREATE TABLE payments (
     id             BIGINT PRIMARY KEY AUTO_INCREMENT,
     booking_id     BIGINT,
-    payment_method ENUM('CASH','MOMO','VNPAY','ZALOPAY'),
+    payment_method ENUM('CASH','MOMO','VNPAY','ZALOPAY','BANK_TRANSFER'),
     amount         DECIMAL(12,2),
     payment_status ENUM('PENDING','SUCCESS','FAILED') DEFAULT 'SUCCESS',
+    transfer_content VARCHAR(100) NULL,
     FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE CASCADE
 );
 
@@ -1410,3 +1411,5 @@ SET age_rating = CASE
   WHEN title LIKE '%Deadpool%' THEN 'T18'
   ELSE 'T13'
 END;
+ALTER TABLE payments
+  MODIFY payment_method ENUM('CASH','MOMO','VNPAY','ZALOPAY','BANK_TRANSFER');

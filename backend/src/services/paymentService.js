@@ -1,8 +1,8 @@
 const pool = require("../configs/db");
 const AppError = require("../utils/AppError");
 
-const createPayment = async ({ booking_id, payment_method, amount }) => {
-  // Payment success also confirms the booking, so both updates run together.
+const createPayment = async ({ booking_id, payment_method, amount, transfer_content }) => {
+  // Bank transfer is verified manually by admin, so it remains pending.
   const connection = await pool.getConnection();
 
   try {
@@ -18,18 +18,27 @@ const createPayment = async ({ booking_id, payment_method, amount }) => {
     }
 
     const paymentAmount = amount || bookingRows[0].total_amount;
+
+    // BANK_TRANSFER: keep payment as PENDING, don't auto-confirm booking
+    // Other methods: auto SUCCESS + confirm booking
+    const isBankTransfer = payment_method === "BANK_TRANSFER";
+    const paymentStatus = isBankTransfer ? "PENDING" : "SUCCESS";
+
     const [result] = await connection.execute(
       `
-      INSERT INTO payments(booking_id, payment_method, amount, payment_status)
-      VALUES (?, ?, ?, 'SUCCESS')
+      INSERT INTO payments(booking_id, payment_method, amount, payment_status, transfer_content)
+      VALUES (?, ?, ?, ?, ?)
       `,
-      [booking_id, payment_method, paymentAmount]
+      [booking_id, payment_method, paymentAmount, paymentStatus, transfer_content || null]
     );
 
-    await connection.execute(
-      "UPDATE bookings SET booking_status = 'CONFIRMED' WHERE id = ?",
-      [booking_id]
-    );
+    // Only auto-confirm booking for non-bank-transfer methods
+    if (!isBankTransfer) {
+      await connection.execute(
+        "UPDATE bookings SET booking_status = 'CONFIRMED' WHERE id = ?",
+        [booking_id]
+      );
+    }
 
     await connection.commit();
 

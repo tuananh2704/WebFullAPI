@@ -1,4 +1,5 @@
 const pool = require("../configs/db");
+const membershipService = require("./membershipService");
 
 const getDashboardStatistics = async () => {
   const [[movieStats]] = await pool.execute("SELECT COUNT(*) AS total_movies FROM movies");
@@ -66,7 +67,8 @@ const getAdminBookings = async () => {
       b.showtime_id, s.start_time, m.title AS movie_title,
       u.full_name AS customer_name, u.email AS customer_email,
       COALESCE(p.payment_method, 'CASH') AS payment_method,
-      COALESCE(p.payment_status, 'PENDING') AS payment_status
+      COALESCE(p.payment_status, 'PENDING') AS payment_status,
+      p.transfer_content
     FROM bookings b
     JOIN showtimes s ON s.id = b.showtime_id
     JOIN movies m ON m.id = s.movie_id
@@ -87,9 +89,73 @@ const updateBookingStatus = async (bookingId, status) => {
     throw new AppError("Invalid booking status", 400);
   }
 
-  await pool.execute("UPDATE bookings SET booking_status = ? WHERE id = ?", [status, bookingId]);
-  const [rows] = await pool.execute("SELECT * FROM bookings WHERE id = ? LIMIT 1", [bookingId]);
-  return rows[0];
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [currentRows] = await connection.execute(
+      "SELECT booking_status, total_amount FROM bookings WHERE id = ? LIMIT 1 FOR UPDATE",
+      [bookingId]
+    );
+
+    if (!currentRows[0]) {
+      const AppError = require("../utils/AppError");
+      throw new AppError("Booking not found", 404);
+    }
+
+    const previousStatus = currentRows[0].booking_status;
+
+    await connection.execute("UPDATE bookings SET booking_status = ? WHERE id = ?", [
+      status,
+      bookingId,
+    ]);
+
+    // When admin confirms booking, also mark payment as SUCCESS and award VIP points once.
+    if (status === "CONFIRMED") {
+      const [paymentRows] = await connection.execute(
+        "SELECT id FROM payments WHERE booking_id = ? LIMIT 1",
+        [bookingId]
+      );
+
+      if (paymentRows.length === 0) {
+        await connection.execute(
+          `
+          INSERT INTO payments(booking_id, payment_method, amount, payment_status)
+          VALUES (?, 'BANK_TRANSFER', ?, 'SUCCESS')
+          `,
+          [bookingId, currentRows[0].total_amount]
+        );
+      }
+
+      await connection.execute(
+        "UPDATE payments SET payment_status = 'SUCCESS' WHERE booking_id = ? AND payment_status = 'PENDING'",
+        [bookingId]
+      );
+
+      if (previousStatus !== "CONFIRMED") {
+        await membershipService.awardBookingRewards(connection, bookingId);
+      }
+    }
+
+    // When admin cancels booking, also mark payment as FAILED.
+    if (status === "CANCELLED") {
+      await connection.execute(
+        "UPDATE payments SET payment_status = 'FAILED' WHERE booking_id = ? AND payment_status = 'PENDING'",
+        [bookingId]
+      );
+    }
+
+    await connection.commit();
+
+    const [rows] = await pool.execute("SELECT * FROM bookings WHERE id = ? LIMIT 1", [bookingId]);
+    return rows[0];
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 };
 
 module.exports = {

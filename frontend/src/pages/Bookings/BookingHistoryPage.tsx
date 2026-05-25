@@ -12,9 +12,9 @@ import type { ApiBookingSummary } from "../../types/api";
 import { formatCurrency, formatDateTime } from "../../utils/format";
 
 const statusLabels: Record<string, string> = {
-  PENDING: "Chờ xử lý",
-  CONFIRMED: "Đã xác nhận",
-  CANCELLED: "Đã hủy",
+  PENDING: "⏳ Chờ duyệt",
+  CONFIRMED: "✅ Đã duyệt",
+  CANCELLED: "❌ Đã hủy",
 };
 
 const BookingHistoryPage = () => {

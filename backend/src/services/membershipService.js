@@ -240,6 +240,82 @@ const recordBenefitUsage = async (userId, benefitKey, bookingId = null) => {
   );
 };
 
+const awardBookingRewards = async (connection, bookingId) => {
+  const [bookingRows] = await connection.execute(
+    `
+    SELECT b.id, b.user_id, b.total_amount, b.points_earned,
+           um.tier_id AS old_tier_id, um.total_spend
+    FROM bookings b
+    JOIN user_memberships um ON um.user_id = b.user_id
+    WHERE b.id = ?
+    LIMIT 1
+    FOR UPDATE
+    `,
+    [bookingId]
+  );
+
+  const booking = bookingRows[0];
+  if (!booking) {
+    throw new AppError("Booking not found", 404);
+  }
+
+  if (Number(booking.points_earned || 0) > 0) {
+    return {
+      points_earned: Number(booking.points_earned),
+      total_spend: Number(booking.total_spend || 0),
+      tier_id: booking.old_tier_id,
+    };
+  }
+
+  const bookingTotal = Number(booking.total_amount || 0);
+  const totalSpend = Number(booking.total_spend || 0) + bookingTotal;
+
+  const [tierRows] = await connection.execute(
+    `
+    SELECT id, point_multiplier
+    FROM membership_tiers
+    WHERE min_spend <= ?
+      AND (max_spend IS NULL OR max_spend >= ?)
+    ORDER BY tier_level DESC
+    LIMIT 1
+    `,
+    [totalSpend, totalSpend]
+  );
+
+  const newTier = tierRows[0] || { id: booking.old_tier_id, point_multiplier: 1 };
+  const pointsEarned = Math.floor((bookingTotal / 10000) * Number(newTier.point_multiplier || 1));
+
+  await connection.execute(
+    `
+    UPDATE user_memberships
+    SET total_spend = ?,
+        tier_id = ?,
+        points = points + ?,
+        tier_updated_at = CASE WHEN tier_id <> ? THEN NOW() ELSE tier_updated_at END
+    WHERE user_id = ?
+    `,
+    [totalSpend, newTier.id, pointsEarned, newTier.id, booking.user_id]
+  );
+
+  if (Number(booking.old_tier_id) !== Number(newTier.id)) {
+    await connection.execute(
+      `
+      INSERT INTO membership_tier_history
+        (user_id, old_tier_id, new_tier_id, reason, total_spend_at)
+      VALUES (?, ?, ?, 'UPGRADE', ?)
+      `,
+      [booking.user_id, booking.old_tier_id, newTier.id, totalSpend]
+    );
+  }
+
+  await connection.execute(
+    "UPDATE bookings SET points_earned = ? WHERE id = ?",
+    [pointsEarned, bookingId]
+  );
+
+  return { points_earned: pointsEarned, total_spend: totalSpend, tier_id: newTier.id };
+};
+
 module.exports = {
   getMembership,
   getAllTiers,
@@ -248,4 +324,5 @@ module.exports = {
   calculateMembershipDiscount,
   usePoints,
   recordBenefitUsage,
+  awardBookingRewards,
 };

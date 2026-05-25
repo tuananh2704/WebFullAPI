@@ -3,8 +3,9 @@ import apiClient from "./apiClient";
 
 type CreatePaymentPayload = {
   booking_id: number;
-  payment_method: "CASH" | "MOMO" | "VNPAY";
+  payment_method: "CASH" | "MOMO" | "VNPAY" | "BANK_TRANSFER";
   amount?: number;
+  transfer_content?: string;
 };
 
 export const createPayment = async (payload: CreatePaymentPayload) => {
