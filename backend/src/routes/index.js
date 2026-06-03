@@ -76,6 +76,13 @@ router.get("/docs", (req, res) => {
       "POST /api/admin/showtimes",
       "PUT /api/admin/showtimes/:id",
       "DELETE /api/admin/showtimes/:id",
+      "GET /api/admin/foods",
+      "POST /api/admin/foods",
+      "PUT /api/admin/foods/:id",
+      "DELETE /api/admin/foods/:id",
+      "POST /api/admin/foods/:id/sizes",
+      "PUT /api/admin/food-sizes/:id",
+      "DELETE /api/admin/food-sizes/:id",
     ],
   });
 });
