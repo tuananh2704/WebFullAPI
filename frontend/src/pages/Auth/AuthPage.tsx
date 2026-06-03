@@ -1,6 +1,15 @@
 import { FormEvent, useEffect, useState } from "react";
+import { notification } from "antd";
 import { useNavigate } from "react-router-dom";
-import { hasAdminAccess, login, register, verifyRegister } from "../../services/authService";
+import {
+  hasAdminAccess,
+  login,
+  register,
+  requestForgotPassword,
+  resetForgotPassword,
+  verifyForgotPasswordCode,
+  verifyRegister,
+} from "../../services/authService";
 
 const DEMO_ACCOUNTS = [
   { email: "a@gmail.com", name: "Nguyen Van A" },
@@ -23,7 +32,7 @@ const DEMO_ACCOUNTS = [
 
 const AuthPage = () => {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [form, setForm] = useState({
     full_name: "",
     email: "",
@@ -38,26 +47,40 @@ const AuthPage = () => {
   const [otp, setOtp] = useState("");
   const [pendingEmail, setPendingEmail] = useState("");
   const [countdown, setCountdown] = useState(0);
+  const [forgotStep, setForgotStep] = useState<"email" | "code" | "password">("email");
+  const [forgotPassword, setForgotPassword] = useState("");
+  const [forgotOtp, setForgotOtp] = useState("");
 
   useEffect(() => {
-    if (!otpStep || countdown <= 0) return;
+    if ((!otpStep && mode !== "forgot") || countdown <= 0) return;
 
     const timer = window.setInterval(() => {
       setCountdown((seconds) => Math.max(seconds - 1, 0));
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [otpStep, countdown]);
+  }, [otpStep, mode, countdown]);
 
   useEffect(() => {
     if (otpStep && countdown === 0) {
       setMessage("Mã OTP đã hết hạn. Vui lòng đăng ký lại.");
     }
-  }, [otpStep, countdown]);
+    if (mode === "forgot" && forgotStep !== "email" && countdown === 0) {
+      setMessage("Mã OTP đã hết hạn. Vui lòng gửi lại mã quên mật khẩu.");
+    }
+  }, [otpStep, mode, forgotStep, countdown]);
 
   const resetOtpStep = () => {
     setOtpStep(false);
     setOtp("");
+    setPendingEmail("");
+    setCountdown(0);
+  };
+
+  const resetForgotStep = () => {
+    setForgotStep("email");
+    setForgotPassword("");
+    setForgotOtp("");
     setPendingEmail("");
     setCountdown(0);
   };
@@ -77,9 +100,9 @@ const AuthPage = () => {
       errs.email = "Email không hợp lệ";
     }
 
-    if (!form.password.trim()) {
+    if (mode !== "forgot" && !form.password.trim()) {
       errs.password = "Vui lòng nhập mật khẩu";
-    } else if (form.password.length < 4) {
+    } else if (mode !== "forgot" && form.password.length < 4) {
       errs.password = "Mật khẩu phải có ít nhất 4 ký tự";
     }
 
@@ -131,6 +154,96 @@ const AuthPage = () => {
       return;
     }
 
+    if (mode === "forgot") {
+      const email = form.email.trim();
+
+      if (forgotStep === "email") {
+        const errs: Record<string, string> = {};
+        if (!email) {
+          errs.email = "Vui lòng nhập email";
+        } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          errs.email = "Email không hợp lệ";
+        }
+        setErrors(errs);
+        if (Object.keys(errs).length > 0) return;
+
+        setLoading(true);
+        try {
+          const data = await requestForgotPassword({ email });
+          setPendingEmail(data.email);
+          setCountdown(data.expires_in_seconds || 300);
+          setForgotStep("code");
+          setForgotOtp("");
+          setErrors({});
+          setMessage("Mã OTP quên mật khẩu đã được gửi tới email. Vui lòng nhập mã trong 5 phút.");
+        } catch (error: any) {
+          setMessage(error.response?.data?.message || "Không gửi được mã quên mật khẩu.");
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (forgotStep === "code") {
+        if (!/^\d{6}$/.test(forgotOtp.trim())) {
+          setErrors({ verification_code: "Mã OTP phải gồm 6 chữ số" });
+          return;
+        }
+        if (countdown <= 0) {
+          setMessage("Mã OTP đã hết hạn. Vui lòng gửi lại mã quên mật khẩu.");
+          return;
+        }
+
+        setLoading(true);
+        try {
+          await verifyForgotPasswordCode({
+            email: pendingEmail,
+            verification_code: forgotOtp.trim(),
+          });
+          setForgotStep("password");
+          setErrors({});
+          setMessage("Mã OTP hợp lệ. Vui lòng nhập mật khẩu mới.");
+        } catch (error: any) {
+          setMessage(error.response?.data?.message || "Không xác minh được mã OTP.");
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      if (forgotPassword.length < 6) {
+        setErrors({ new_password: "Mật khẩu mới phải có ít nhất 6 ký tự" });
+        return;
+      }
+      if (countdown <= 0) {
+        setMessage("Mã OTP đã hết hạn. Vui lòng gửi lại mã quên mật khẩu.");
+        return;
+      }
+
+      setLoading(true);
+      try {
+        await resetForgotPassword({
+          email: pendingEmail,
+          verification_code: forgotOtp.trim(),
+          new_password: forgotPassword,
+        });
+        setMode("login");
+        setForm({ ...form, email: pendingEmail, password: "" });
+        resetForgotStep();
+        setErrors({});
+        setMessage("");
+        notification.success({
+          message: "Đổi mật khẩu thành công",
+          description: "Bạn có thể đăng nhập bằng mật khẩu mới.",
+        });
+      } catch (error: any) {
+        setMessage(error.response?.data?.message || "Không đổi được mật khẩu.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     if (!validate()) return;
 
     setLoading(true);
@@ -167,14 +280,22 @@ const AuthPage = () => {
           <div className="auth-info-panel">
             <p className="eyebrow">Account</p>
             <h1 style={{ marginBottom: 16 }}>
-              {otpStep ? "Xác minh OTP" : mode === "login" ? "Đăng nhập" : "Đăng ký tài khoản"}
+              {otpStep
+                ? "Xác minh OTP"
+                : mode === "login"
+                  ? "Đăng nhập"
+                  : mode === "forgot"
+                    ? "Quên mật khẩu"
+                    : "Đăng ký tài khoản"}
             </h1>
             <p className="muted" style={{ marginBottom: 28, lineHeight: 1.6 }}>
               {otpStep
                 ? `Nhập mã OTP cho ${pendingEmail}. Mã sẽ hết hạn sau 5 phút.`
                 : mode === "login"
                   ? "Đăng nhập để đặt vé xem phim tại CINEMAX. Chọn tài khoản demo bên dưới hoặc nhập thông tin của bạn."
-                  : "Tạo tài khoản mới để trải nghiệm đặt vé trực tuyến."}
+                  : mode === "forgot"
+                    ? "Nhập email đã đăng ký để nhận mã OTP đặt lại mật khẩu."
+                    : "Tạo tài khoản mới để trải nghiệm đặt vé trực tuyến."}
             </p>
 
             {mode === "login" && !otpStep && (
@@ -212,6 +333,7 @@ const AuthPage = () => {
                   setErrors({});
                   setMessage("");
                   resetOtpStep();
+                  resetForgotStep();
                 }}
               >
                 Đăng nhập
@@ -224,6 +346,7 @@ const AuthPage = () => {
                   setErrors({});
                   setMessage("");
                   resetOtpStep();
+                  resetForgotStep();
                 }}
               >
                 Đăng ký
@@ -255,6 +378,71 @@ const AuthPage = () => {
                       <span className="field-error">{errors.verification_code}</span>
                     )}
                   </div>
+                </>
+              ) : mode === "forgot" ? (
+                <>
+                  {forgotStep !== "email" && (
+                    <div className="otp-status">
+                      <span>Thời gian còn lại</span>
+                      <strong>{formatCountdown(countdown)}</strong>
+                    </div>
+                  )}
+
+                  {forgotStep === "email" && (
+                    <div className="form-field">
+                      <label htmlFor="forgot_email">Email *</label>
+                      <input
+                        id="forgot_email"
+                        type="email"
+                        placeholder="email@gmail.com"
+                        value={form.email}
+                        onChange={(e) => setForm({ ...form, email: e.target.value })}
+                        className={errors.email ? "input-error" : ""}
+                      />
+                      {errors.email && <span className="field-error">{errors.email}</span>}
+                    </div>
+                  )}
+
+                  {forgotStep === "code" && (
+                    <div className="form-field">
+                      <label htmlFor="forgot_code">Mã OTP *</label>
+                      <input
+                        id="forgot_code"
+                        inputMode="numeric"
+                        maxLength={6}
+                        placeholder="Nhập 6 chữ số"
+                        value={forgotOtp}
+                        onChange={(e) => {
+                          setForgotOtp(e.target.value.replace(/\D/g, "").slice(0, 6));
+                          setErrors({});
+                        }}
+                        className={errors.verification_code ? "input-error" : ""}
+                      />
+                      {errors.verification_code && (
+                        <span className="field-error">{errors.verification_code}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {forgotStep === "password" && (
+                    <div className="form-field">
+                      <label htmlFor="new_password">Mật khẩu mới *</label>
+                      <input
+                        id="new_password"
+                        type="password"
+                        placeholder="Nhập mật khẩu mới"
+                        value={forgotPassword}
+                        onChange={(e) => {
+                          setForgotPassword(e.target.value);
+                          setErrors({});
+                        }}
+                        className={errors.new_password ? "input-error" : ""}
+                      />
+                      {errors.new_password && (
+                        <span className="field-error">{errors.new_password}</span>
+                      )}
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
@@ -325,6 +513,21 @@ const AuthPage = () => {
                     />
                     {errors.password && <span className="field-error">{errors.password}</span>}
                   </div>
+                  {mode === "login" && (
+                    <button
+                      type="button"
+                      className="forgot-password-link"
+                      onClick={() => {
+                        setMode("forgot");
+                        setErrors({});
+                        setMessage("");
+                        resetOtpStep();
+                        resetForgotStep();
+                      }}
+                    >
+                      Quên mật khẩu?
+                    </button>
+                  )}
                 </>
               )}
 
@@ -333,8 +536,19 @@ const AuthPage = () => {
               <button
                 className="primary-btn form-submit"
                 type="submit"
-                disabled={loading || (otpStep && countdown <= 0)}
-                style={{ opacity: loading || (otpStep && countdown <= 0) ? 0.7 : 1 }}
+                disabled={
+                  loading ||
+                  (otpStep && countdown <= 0) ||
+                  (mode === "forgot" && forgotStep !== "email" && countdown <= 0)
+                }
+                style={{
+                  opacity:
+                    loading ||
+                    (otpStep && countdown <= 0) ||
+                    (mode === "forgot" && forgotStep !== "email" && countdown <= 0)
+                      ? 0.7
+                      : 1,
+                }}
               >
                 {loading
                   ? "Đang xử lý..."
@@ -342,7 +556,13 @@ const AuthPage = () => {
                     ? "Xác minh OTP"
                     : mode === "login"
                       ? "Đăng nhập"
-                      : "Tạo tài khoản"}
+                      : mode === "forgot"
+                        ? forgotStep === "email"
+                          ? "Gửi mã OTP"
+                          : forgotStep === "code"
+                            ? "Xác minh OTP"
+                            : "Đặt mật khẩu mới"
+                        : "Tạo tài khoản"}
               </button>
 
               {otpStep && (
@@ -357,6 +577,20 @@ const AuthPage = () => {
                   }}
                 >
                   Đăng ký lại
+                </button>
+              )}
+              {mode === "forgot" && (
+                <button
+                  className="secondary-btn form-submit"
+                  type="button"
+                  onClick={() => {
+                    setMode("login");
+                    setErrors({});
+                    setMessage("");
+                    resetForgotStep();
+                  }}
+                >
+                  Quay lại đăng nhập
                 </button>
               )}
             </form>

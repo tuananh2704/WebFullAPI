@@ -283,12 +283,13 @@ const requestPasswordChange = async ({ userId, new_password }) => {
   await pool.execute(
     `
     INSERT INTO pending_users(
-      full_name, email, phone, password_hash, verification_code, expires_at
+      full_name, email, phone, birth_date, password_hash, verification_code, expires_at
     )
-    VALUES (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))
+    VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))
     ON DUPLICATE KEY UPDATE
       full_name = VALUES(full_name),
       phone = VALUES(phone),
+      birth_date = VALUES(birth_date),
       password_hash = VALUES(password_hash),
       verification_code = VALUES(verification_code),
       expires_at = VALUES(expires_at),
@@ -298,6 +299,7 @@ const requestPasswordChange = async ({ userId, new_password }) => {
       user.full_name,
       user.email,
       user.phone || null,
+      user.birth_date,
       passwordHash,
       verificationCode,
       OTP_TTL_SECONDS,
@@ -360,6 +362,122 @@ const verifyPasswordChange = async ({ userId, verification_code }) => {
   return { changed: true };
 };
 
+const requestForgotPassword = async ({ email }) => {
+  await cleanupExpiredPendingUsers();
+
+  const user = await findUserByEmail(email);
+  if (!user || user.status !== "ACTIVE") {
+    throw new AppError("Email chua duoc dang ky", 404);
+  }
+
+  const verificationCode = generateVerificationCode();
+
+  await pool.execute(
+    `
+    INSERT INTO pending_users(
+      full_name, email, phone, birth_date, password_hash, verification_code, expires_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL ? SECOND))
+    ON DUPLICATE KEY UPDATE
+      full_name = VALUES(full_name),
+      phone = VALUES(phone),
+      birth_date = VALUES(birth_date),
+      password_hash = VALUES(password_hash),
+      verification_code = VALUES(verification_code),
+      expires_at = VALUES(expires_at),
+      created_at = CURRENT_TIMESTAMP
+    `,
+    [
+      user.full_name,
+      user.email,
+      user.phone || null,
+      formatDateOnly(user.birth_date),
+      user.password_hash,
+      verificationCode,
+      OTP_TTL_SECONDS,
+    ]
+  );
+
+  try {
+    await sendPasswordChangeEmail({
+      to: user.email,
+      fullName: user.full_name,
+      verificationCode,
+    });
+  } catch (error) {
+    await pool.execute("DELETE FROM pending_users WHERE email = ?", [user.email]);
+    if (process.env.NODE_ENV !== "production") {
+      console.error("Failed to send forgot password email", error);
+    }
+    throw new AppError("Khong gui duoc email OTP. Vui long kiem tra cau hinh SMTP.", 500);
+  }
+
+  schedulePendingUserDeletion(user.email, verificationCode);
+
+  return {
+    email: user.email,
+    expires_in_seconds: OTP_TTL_SECONDS,
+  };
+};
+
+const verifyForgotPasswordCode = async ({ email, verification_code }) => {
+  await cleanupExpiredPendingUsers();
+
+  const [pendingRows] = await pool.execute(
+    `
+    SELECT id FROM pending_users
+    WHERE email = ? AND verification_code = ? AND expires_at > NOW()
+    LIMIT 1
+    `,
+    [email, verification_code]
+  );
+
+  if (!pendingRows[0]) {
+    await pool.execute("DELETE FROM pending_users WHERE email = ? AND expires_at <= NOW()", [
+      email,
+    ]);
+    throw new AppError("OTP is invalid or expired", 400);
+  }
+
+  return { verified: true };
+};
+
+const resetForgotPassword = async ({ email, verification_code, new_password }) => {
+  if (!new_password || new_password.length < 6) {
+    throw new AppError("Password must be at least 6 characters", 400);
+  }
+
+  await cleanupExpiredPendingUsers();
+
+  const user = await findUserByEmail(email);
+  if (!user || user.status !== "ACTIVE") {
+    throw new AppError("Email chua duoc dang ky", 404);
+  }
+
+  const [pendingRows] = await pool.execute(
+    `
+    SELECT id FROM pending_users
+    WHERE email = ? AND verification_code = ? AND expires_at > NOW()
+    LIMIT 1
+    `,
+    [email, verification_code]
+  );
+
+  const pendingUser = pendingRows[0];
+  if (!pendingUser) {
+    await pool.execute("DELETE FROM pending_users WHERE email = ? AND expires_at <= NOW()", [
+      email,
+    ]);
+    throw new AppError("OTP is invalid or expired", 400);
+  }
+
+  const passwordHash = await bcrypt.hash(new_password, 10);
+  await pool.execute("UPDATE users SET password_hash = ? WHERE id = ?", [passwordHash, user.id]);
+  await pool.execute("DELETE FROM pending_users WHERE id = ?", [pendingUser.id]);
+
+  return { changed: true };
+};
+
 module.exports = {
   register,
   verifyRegister,
@@ -367,4 +485,7 @@ module.exports = {
   findUserById,
   requestPasswordChange,
   verifyPasswordChange,
+  requestForgotPassword,
+  verifyForgotPasswordCode,
+  resetForgotPassword,
 };

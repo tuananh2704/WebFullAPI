@@ -32,6 +32,21 @@ type PasswordChangeVerifyPayload = {
   verification_code: string;
 };
 
+type ForgotPasswordRequestPayload = {
+  email: string;
+};
+
+type ForgotPasswordVerifyPayload = {
+  email: string;
+  verification_code: string;
+};
+
+type ForgotPasswordResetPayload = {
+  email: string;
+  verification_code: string;
+  new_password: string;
+};
+
 export const login = async (payload: LoginPayload) => {
   const response = await apiClient.post<ApiResponse<{ token: string; user: ApiUser }>>(
     "/auth/login",
@@ -81,6 +96,33 @@ export const requestPasswordChange = async (payload: PasswordChangeRequestPayloa
 export const verifyPasswordChange = async (payload: PasswordChangeVerifyPayload) => {
   const response = await apiClient.post<ApiResponse<{ changed: boolean }>>(
     "/auth/password-change/verify",
+    payload
+  );
+
+  return response.data.data;
+};
+
+export const requestForgotPassword = async (payload: ForgotPasswordRequestPayload) => {
+  const response = await apiClient.post<ApiResponse<RegisterOtpResponse>>(
+    "/auth/forgot-password/request",
+    payload
+  );
+
+  return response.data.data;
+};
+
+export const verifyForgotPasswordCode = async (payload: ForgotPasswordVerifyPayload) => {
+  const response = await apiClient.post<ApiResponse<{ verified: boolean }>>(
+    "/auth/forgot-password/verify-code",
+    payload
+  );
+
+  return response.data.data;
+};
+
+export const resetForgotPassword = async (payload: ForgotPasswordResetPayload) => {
+  const response = await apiClient.post<ApiResponse<{ changed: boolean }>>(
+    "/auth/forgot-password/reset",
     payload
   );
 

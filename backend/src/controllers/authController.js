@@ -44,6 +44,24 @@ const verifyPasswordChange = asyncHandler(async (req, res) => {
   return successResponse(res, "Password changed successfully", data);
 });
 
+const requestForgotPassword = asyncHandler(async (req, res) => {
+  requireFields(req.body, ["email"]);
+  const data = await authService.requestForgotPassword(req.body);
+  return successResponse(res, "Forgot password OTP sent successfully", data);
+});
+
+const verifyForgotPasswordCode = asyncHandler(async (req, res) => {
+  requireFields(req.body, ["email", "verification_code"]);
+  const data = await authService.verifyForgotPasswordCode(req.body);
+  return successResponse(res, "Forgot password OTP verified successfully", data);
+});
+
+const resetForgotPassword = asyncHandler(async (req, res) => {
+  requireFields(req.body, ["email", "verification_code", "new_password"]);
+  const data = await authService.resetForgotPassword(req.body);
+  return successResponse(res, "Password reset successfully", data);
+});
+
 module.exports = {
   register,
   verifyRegister,
@@ -51,4 +69,7 @@ module.exports = {
   profile,
   requestPasswordChange,
   verifyPasswordChange,
+  requestForgotPassword,
+  verifyForgotPasswordCode,
+  resetForgotPassword,
 };

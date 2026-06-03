@@ -2363,6 +2363,25 @@ select {
   border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
+.forgot-password-link {
+  align-self: flex-start;
+  width: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #fff;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.forgot-password-link:hover {
+  background: transparent;
+  color: #fff;
+  text-decoration: underline;
+}
+
 .demo-accounts {
   margin-top: 8px;
 }
