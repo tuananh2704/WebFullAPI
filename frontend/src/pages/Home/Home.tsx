@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { getCinemas } from "../../services/cinemaService";
 import { getMovies } from "../../services/movieService";
 import { getShowtimesByMovie } from "../../services/showtimeService";
-import type { ApiMovie, ApiShowtime } from "../../types/api";
+import type { ApiCinema, ApiMovie, ApiShowtime } from "../../types/api";
 import HeroTrailerSlider from "../../components/HeroTrailerSlider";
 import BookingSection from "./components/BookingSection";
 import DealsSection from "./components/DealsSection";
+import FeaturedCinemasSection from "./components/FeaturedCinemasSection";
 import MoviesSection from "./components/MoviesSection";
 import { fallbackMovies, posterFallbacks } from "./homeData";
 import type { Movie } from "./homeData";
@@ -26,12 +28,14 @@ const mapApiMovieToMovie = (movie: ApiMovie, index: number): Movie => ({
   description: movie.description || "",
   format: movie.language || "Phụ đề",
   featured: index === 2,
+  bookingCount: Number(movie.booking_count || 0),
 });
 
 const Home = () => {
   const bookingRef = useRef<HTMLDivElement>(null);
   const [movies, setMovies] = useState<Movie[]>(fallbackMovies);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
+  const [cinemas, setCinemas] = useState<ApiCinema[]>([]);
   const [showtimes, setShowtimes] = useState<ApiShowtime[]>([]);
   const [isLoadingMovies, setIsLoadingMovies] = useState(true);
   const [isLoadingShowtimes, setIsLoadingShowtimes] = useState(false);
@@ -74,6 +78,18 @@ const Home = () => {
     fetchMovies();
   }, []);
 
+  useEffect(() => {
+    const fetchCinemas = async () => {
+      try {
+        setCinemas(await getCinemas());
+      } catch {
+        setCinemas([]);
+      }
+    };
+
+    fetchCinemas();
+  }, []);
+
   const handleChooseMovie = async (movie: Movie) => {
     setSelectedMovie(movie);
     setShowtimes([]);
@@ -114,6 +130,8 @@ const Home = () => {
         errorMessage={movieError}
         onChooseMovie={handleChooseMovie}
       />
+
+      <FeaturedCinemasSection cinemas={cinemas} />
 
       <div ref={bookingRef}>
         <BookingSection

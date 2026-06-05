@@ -37,6 +37,20 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   ENDED: { bg: "rgba(150,150,150,0.18)", text: "#999" },
 };
 
+const formatBookingCount = (count: number | string | undefined) => {
+  const numericCount = Number(count || 0);
+
+  if (numericCount >= 1000000) {
+    return `${(numericCount / 1000000).toFixed(numericCount >= 10000000 ? 0 : 1)}m`;
+  }
+
+  if (numericCount >= 1000) {
+    return `${(numericCount / 1000).toFixed(numericCount >= 10000 ? 0 : 1)}k`;
+  }
+
+  return String(numericCount);
+};
+
 // Poster placeholder gradient colors per index
 const POSTER_GRADIENTS = [
   "linear-gradient(135deg, #1a237e, #7b1fa2)",
@@ -326,6 +340,10 @@ const MoviesPage = () => {
                     }}
                   >
                     {STATUS_LABELS[movie.status]}
+                  </span>
+
+                  <span className="movie-adv-booking-count">
+                    Lượt đặt vé: {formatBookingCount(movie.booking_count)}
                   </span>
 
                   {/* Rating */}

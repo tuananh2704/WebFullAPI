@@ -10,6 +10,7 @@ export type Movie = {
   description?: string;
   format?: string;
   featured?: boolean;
+  bookingCount?: number;
 };
 
 export type Deal = {

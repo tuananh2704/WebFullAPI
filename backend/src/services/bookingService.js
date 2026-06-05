@@ -47,6 +47,14 @@ const getShowtimeMeta = async (connection, showtimeId) => {
   return rows[0] || null;
 };
 
+const getTodayDateKey = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
 const getUserBirthDate = async (connection, userId) => {
   const [rows] = await connection.execute(
     "SELECT birth_date FROM users WHERE id = ? LIMIT 1",
@@ -115,6 +123,10 @@ const createBooking = async ({ userId, showtime_id, seat_ids, foods = [], points
     const showtimeMeta = await getShowtimeMeta(connection, showtime_id);
     if (!showtimeMeta) {
       throw new AppError("Invalid showtime", 400);
+    }
+
+    if (showtimeMeta.show_date < getTodayDateKey()) {
+      throw new AppError("Khong the dat ve cho ngay da qua", 400);
     }
 
     const userAge = getAge(await getUserBirthDate(connection, userId));

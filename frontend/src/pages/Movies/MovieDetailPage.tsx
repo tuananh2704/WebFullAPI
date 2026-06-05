@@ -55,6 +55,8 @@ const formatLocalDate = (date: Date) => {
   return `${yyyy}-${mm}-${dd}`;
 };
 
+const getTodayDateKey = () => formatLocalDate(new Date());
+
 const getShowDate = (showtime: ApiShowtime) => {
   if (showtime.show_date) {
     return showtime.show_date.slice(0, 10);
@@ -158,7 +160,10 @@ const MovieDetailPage = () => {
     Number.isFinite(preselectedCinemaId) && preselectedCinemaId > 0 ? preselectedCinemaId : null
   );
   const [showtimesByDate, setShowtimesByDate] = useState<ShowtimeByDate[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>(() => preselectedDate || formatLocalDate(new Date()));
+  const [selectedDate, setSelectedDate] = useState<string>(() => {
+    const today = getTodayDateKey();
+    return preselectedDate && preselectedDate >= today ? preselectedDate : today;
+  });
   const [selectedShowtime, setSelectedShowtime] = useState<ApiShowtime | null>(null);
   const [seats, setSeats] = useState<ApiSeat[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<number[]>([]);
@@ -211,7 +216,12 @@ const MovieDetailPage = () => {
         ]);
         setMovie(movieData);
         setCinemas(cinemaData);
-        setMovieShowtimes(movieShowtimeData);
+        const today = getTodayDateKey();
+        setMovieShowtimes(
+          movieShowtimeData.filter(
+            (showtime) => showtime.status !== "CANCELLED" && getShowDate(showtime) >= today
+          )
+        );
         setFoods(foodData);
         setFoodSizes(sizeData);
       } catch (error: any) {
@@ -321,7 +331,8 @@ const MovieDetailPage = () => {
         .filter(
           (showtime) =>
             showtime.status === "OPEN" &&
-            showtime.cinema_id === selectedCinemaId
+            showtime.cinema_id === selectedCinemaId &&
+            getShowDate(showtime) >= getTodayDateKey()
         )
         .map(getShowDate)
     );

@@ -17,6 +17,7 @@ export type ApiMovie = {
   age_rating: string | null;
   rating: string | number | null;
   status: "COMING_SOON" | "NOW_SHOWING" | "ENDED";
+  booking_count?: number | string;
   genres: string[];
 };
 
@@ -101,7 +102,11 @@ export type ApiCinema = {
   address: string;
   phone: string;
   logo_url: string | null;
+  latitude: number | string | null;
+  longitude: number | string | null;
   status: string;
+  today_showtime_count?: number | string;
+  showing_movie_count?: number | string;
   rooms?: ApiRoom[];
 };
 

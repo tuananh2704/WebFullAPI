@@ -6,6 +6,18 @@ type MovieCardProps = {
   onChooseMovie: (movie: Movie) => void;
 };
 
+const formatBookingCount = (count = 0) => {
+  if (count >= 1000000) {
+    return `${(count / 1000000).toFixed(count >= 10000000 ? 0 : 1)}m`;
+  }
+
+  if (count >= 1000) {
+    return `${(count / 1000).toFixed(count >= 10000 ? 0 : 1)}k`;
+  }
+
+  return String(count);
+};
+
 const MovieCard = ({ movie, onChooseMovie }: MovieCardProps) => {
   return (
     <article className="movie-card" onClick={() => onChooseMovie(movie)}>
@@ -14,6 +26,10 @@ const MovieCard = ({ movie, onChooseMovie }: MovieCardProps) => {
 
         {/* Age badge */}
         <span className="age-badge small">{movie.age}</span>
+
+        <span className="booking-count-badge">
+          Lượt đặt vé: {formatBookingCount(movie.bookingCount)}
+        </span>
 
         {/* Rating */}
         <span className="card-rating">

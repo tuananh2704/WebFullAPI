@@ -1,4 +1,5 @@
 const pool = require("../configs/db");
+const membershipService = require("./membershipService");
 
 const getDashboardStatistics = async () => {
   const [[movieStats]] = await pool.execute("SELECT COUNT(*) AS total_movies FROM movies");
@@ -239,9 +240,46 @@ const updateBookingStatus = async (bookingId, status) => {
     throw new AppError("Invalid booking status", 400);
   }
 
-  await pool.execute("UPDATE bookings SET booking_status = ? WHERE id = ?", [status, bookingId]);
-  const [rows] = await pool.execute("SELECT * FROM bookings WHERE id = ? LIMIT 1", [bookingId]);
-  return rows[0];
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [bookingRows] = await connection.execute(
+      "SELECT * FROM bookings WHERE id = ? LIMIT 1 FOR UPDATE",
+      [bookingId]
+    );
+
+    if (!bookingRows[0]) {
+      const AppError = require("../utils/AppError");
+      throw new AppError("Booking not found", 404);
+    }
+
+    await connection.execute("UPDATE bookings SET booking_status = ? WHERE id = ?", [
+      status,
+      bookingId,
+    ]);
+
+    if (status === "CONFIRMED") {
+      await connection.execute(
+        "UPDATE payments SET payment_status = 'SUCCESS' WHERE booking_id = ? AND payment_status = 'PENDING'",
+        [bookingId]
+      );
+      await membershipService.awardBookingRewards(connection, bookingId);
+    }
+
+    const [rows] = await connection.execute("SELECT * FROM bookings WHERE id = ? LIMIT 1", [
+      bookingId,
+    ]);
+
+    await connection.commit();
+    return rows[0];
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 };
 
 const getUsers = async (filters = {}) => {

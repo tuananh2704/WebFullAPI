@@ -5,6 +5,12 @@ const movieSelect = `
   SELECT
     m.id, m.title, m.description, m.director, m.duration, m.release_date, m.poster_url,
     m.trailer_url, m.language, m.age_rating, m.rating, m.status,
+    (
+      SELECT COUNT(*)
+      FROM bookings b
+      JOIN showtimes s ON s.id = b.showtime_id
+      WHERE s.movie_id = m.id
+    ) AS booking_count,
     COALESCE(JSON_ARRAYAGG(g.name), JSON_ARRAY()) AS genres
   FROM movies m
   LEFT JOIN movie_genres mg ON mg.movie_id = m.id

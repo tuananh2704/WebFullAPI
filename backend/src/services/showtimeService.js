@@ -18,6 +18,7 @@ const getShowtimesByMovie = async (movieId) => {
     `
     ${showtimeSelect}
     WHERE s.movie_id = ?
+      AND DATE(s.start_time) >= CURDATE()
     ORDER BY s.start_time ASC
     `,
     [movieId]
@@ -169,7 +170,7 @@ const groupByDate = (rows) => {
  * Ket qua GROUP BY ngay de frontend hien thi theo tab ngay.
  */
 const getShowtimesByCinema = async (cinemaId, { movie_id, date, week } = {}) => {
-  const where = ["r.cinema_id = ?", "s.status != 'CANCELLED'"];
+  const where = ["r.cinema_id = ?", "s.status != 'CANCELLED'", "DATE(s.start_time) >= CURDATE()"];
   const params = [cinemaId];
 
   if (movie_id) {
@@ -212,7 +213,12 @@ const getShowtimesByCinema = async (cinemaId, { movie_id, date, week } = {}) => 
  * Dung cho flow: chon phim -> chon rap -> xem suat theo ngay
  */
 const getShowtimesByMovieAndCinema = async (movieId, cinemaId, { date } = {}) => {
-  const where = ["s.movie_id = ?", "r.cinema_id = ?", "s.status != 'CANCELLED'"];
+  const where = [
+    "s.movie_id = ?",
+    "r.cinema_id = ?",
+    "s.status != 'CANCELLED'",
+    "DATE(s.start_time) >= CURDATE()",
+  ];
   const params = [movieId, cinemaId];
 
   if (date) {

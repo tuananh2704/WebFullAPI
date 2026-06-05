@@ -25,6 +25,8 @@ const formatDateKey = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
+const getTodayDateKey = () => formatDateKey(new Date());
+
 const getShowDate = (showtime: ApiShowtime) => {
   if (showtime.show_date) {
     return showtime.show_date.slice(0, 10);
@@ -63,9 +65,11 @@ const BookingSection = ({
   const [selectedCinemaId, setSelectedCinemaId] = useState<number | null>(null);
 
   const availableDateSet = useMemo(() => {
+    const today = getTodayDateKey();
+
     return new Set(
       showtimes
-        .filter((showtime) => showtime.status !== "CANCELLED")
+        .filter((showtime) => showtime.status !== "CANCELLED" && getShowDate(showtime) >= today)
         .map(getShowDate)
     );
   }, [showtimes]);
@@ -77,7 +81,9 @@ const BookingSection = ({
       return [];
     }
 
-    const firstDate = new Date(`${dates[0]}T00:00:00`);
+    const today = getTodayDateKey();
+    const firstDateKey = dates[0] < today ? today : dates[0];
+    const firstDate = new Date(`${firstDateKey}T00:00:00`);
     const lastDate = new Date(`${dates[dates.length - 1]}T00:00:00`);
     const options: string[] = [];
 
@@ -104,7 +110,10 @@ const BookingSection = ({
     }
 
     return showtimes.filter(
-      (showtime) => getShowDate(showtime) === selectedDate && showtime.status !== "CANCELLED"
+      (showtime) =>
+        getShowDate(showtime) === selectedDate &&
+        showtime.status !== "CANCELLED" &&
+        getShowDate(showtime) >= getTodayDateKey()
     );
   }, [selectedDate, showtimes]);
 

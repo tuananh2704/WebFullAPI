@@ -23,7 +23,24 @@ const getAll = async ({ city, brand } = {}) => {
   const [rows] = await pool.execute(
     `
     SELECT
-      c.id, c.name, c.brand, c.city, c.address, c.phone, c.logo_url, c.status,
+      c.id, c.name, c.brand, c.city, c.address, c.phone, c.logo_url,
+      c.latitude, c.longitude, c.status,
+      (
+        SELECT COUNT(*)
+        FROM showtimes s
+        JOIN rooms sr ON sr.id = s.room_id
+        WHERE sr.cinema_id = c.id
+          AND DATE(s.start_time) = CURDATE()
+          AND s.status != 'CANCELLED'
+      ) AS today_showtime_count,
+      (
+        SELECT COUNT(DISTINCT s.movie_id)
+        FROM showtimes s
+        JOIN rooms sr ON sr.id = s.room_id
+        WHERE sr.cinema_id = c.id
+          AND DATE(s.start_time) >= CURDATE()
+          AND s.status != 'CANCELLED'
+      ) AS showing_movie_count,
       JSON_ARRAYAGG(
         JSON_OBJECT(
           'id', r.id,
@@ -53,7 +70,7 @@ const getAll = async ({ city, brand } = {}) => {
  */
 const getById = async (cinemaId) => {
   const [cinemaRows] = await pool.execute(
-    `SELECT id, name, brand, city, address, phone, logo_url, status FROM cinemas WHERE id = ? LIMIT 1`,
+    `SELECT id, name, brand, city, address, phone, logo_url, latitude, longitude, status FROM cinemas WHERE id = ? LIMIT 1`,
     [cinemaId]
   );
 

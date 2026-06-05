@@ -264,6 +264,27 @@ button {
   z-index: 2;
 }
 
+.booking-count-badge {
+  position: absolute;
+  top: 48px;
+  left: 12px;
+  z-index: 2;
+  max-width: calc(100% - 24px);
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.74);
+  color: #fff;
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
+}
+
 /* =================== BUTTONS =================== */
 .primary-btn,
 .ghost-btn,
@@ -315,7 +336,7 @@ button {
 
 /* =================== MOVIES SECTION =================== */
 .movies-section {
-  padding: 56px 0 80px;
+  padding: 56px 0 48px;
 }
 
 .movies-header {
@@ -323,6 +344,22 @@ button {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 32px;
+}
+
+.movies-header h2,
+.section-head-row h2 {
+  margin-top: 6px;
+  font-size: clamp(30px, 3.2vw, 44px);
+  line-height: 1.08;
+  font-weight: 900;
+}
+
+.section-kicker {
+  color: var(--red);
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .movie-tabs {
@@ -396,8 +433,26 @@ button {
   padding-bottom: 8px;
 }
 
+.movie-slider-compact .movie-card {
+  flex-basis: 200px;
+}
+
+.movie-slider-compact .poster-wrap {
+  height: 282px;
+}
+
 .movie-slider::-webkit-scrollbar {
   display: none;
+}
+
+.movies-section-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 24px;
+}
+
+.coming-soon-block {
+  margin-top: 68px;
 }
 
 /* Fade edges */
@@ -430,6 +485,195 @@ button {
 
 .section-state.warning {
   color: var(--yellow);
+}
+
+.featured-cinemas-section {
+  padding: 38px 0 78px;
+}
+
+.section-head-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.featured-cinema-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.featured-cinema-card {
+  display: grid;
+  gap: 16px;
+  min-height: 260px;
+  padding: 22px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(242, 7, 18, 0.08), transparent 120px),
+    #191919;
+  transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.featured-cinema-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(242, 7, 18, 0.48);
+  background:
+    linear-gradient(180deg, rgba(242, 7, 18, 0.13), transparent 130px),
+    #202020;
+}
+
+.cinema-brand-mark {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  background: var(--red);
+  color: #fff;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.featured-cinema-card span {
+  color: var(--yellow);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.featured-cinema-card h3 {
+  margin-top: 6px;
+  color: #fff;
+  font-size: 22px;
+  line-height: 1.22;
+}
+
+.featured-cinema-card p,
+.featured-cinema-meta {
+  color: #c8c8c8;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.featured-cinema-card p,
+.featured-cinema-meta span {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.featured-cinema-card svg {
+  flex: 0 0 auto;
+  color: var(--red);
+  margin-top: 2px;
+}
+
+.featured-cinema-meta {
+  display: grid;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.site-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background:
+    linear-gradient(180deg, rgba(242, 7, 18, 0.07), transparent 180px),
+    #101010;
+}
+
+.footer-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.35fr) repeat(3, minmax(0, 1fr));
+  gap: 30px;
+  padding: 46px 0 30px;
+}
+
+.footer-brand {
+  margin-bottom: 18px;
+}
+
+.footer-brand-block p,
+.footer-column p {
+  color: #b8b8b8;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.footer-socials {
+  display: flex;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.footer-socials a,
+.footer-column a {
+  transition: color 160ms ease, background 160ms ease, border-color 160ms ease;
+}
+
+.footer-socials a {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.045);
+  color: #f2f2f2;
+}
+
+.footer-socials a:hover {
+  border-color: var(--red);
+  background: rgba(242, 7, 18, 0.16);
+  color: #fff;
+}
+
+.footer-column {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.footer-column h2 {
+  margin-bottom: 4px;
+  color: #fff;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.footer-column a {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: #d2d2d2;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.footer-column a:hover {
+  color: var(--red);
+}
+
+.footer-column svg {
+  color: var(--yellow);
+  flex: 0 0 auto;
+}
+
+.footer-bottom {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px 0 24px;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+  color: #8f8f8f;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .app-page {
@@ -1170,7 +1414,7 @@ select {
 }
 
 .booking-section {
-  padding: 0 0 92px;
+  padding: 32px 0 92px;
 }
 
 .booking-header {
@@ -1698,6 +1942,19 @@ select {
   line-height: 1.3;
 }
 
+.nearest-cinema-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  margin-bottom: 12px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: rgba(255, 214, 10, 0.14);
+  color: var(--yellow);
+  font-size: 12px;
+  font-weight: 900;
+}
+
 .cinema-card-city {
   display: flex;
   align-items: center;
@@ -1706,6 +1963,13 @@ select {
   font-size: 13px;
   font-weight: 700;
   margin-bottom: 4px;
+}
+
+.cinema-card-distance {
+  margin: 0 0 7px;
+  color: var(--yellow);
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .cinema-card-address {
@@ -1720,10 +1984,34 @@ select {
   gap: 6px;
 }
 
+.cinema-card-stats {
+  display: grid;
+  gap: 5px;
+  margin-top: 14px;
+  padding: 12px 13px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.cinema-card-stats strong {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.cinema-card-stats span {
+  color: var(--yellow);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .cinema-card-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
   padding: 12px 20px 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -1731,6 +2019,126 @@ select {
 .cinema-phone {
   font-size: 13px;
   color: #999;
+}
+
+.cinema-map-btn {
+  background: #2a2a2a !important;
+  border-color: rgba(255, 255, 255, 0.14) !important;
+  color: #fff !important;
+}
+
+.cinema-map-btn:hover {
+  border-color: rgba(229, 9, 20, 0.7) !important;
+  color: #fff !important;
+}
+
+.cinema-map-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.cinema-map-modal {
+  position: relative;
+  width: min(92vw, 880px);
+  max-height: min(86vh, 760px);
+  overflow: auto;
+  border-radius: 18px;
+  border: 1px solid rgba(229, 9, 20, 0.72);
+  background:
+    linear-gradient(180deg, rgba(229, 9, 20, 0.1), transparent 160px),
+    #161616;
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.62);
+}
+
+.cinema-map-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.54);
+  color: #fff;
+  font-size: 27px;
+  line-height: 1;
+}
+
+.cinema-map-close:hover {
+  background: var(--red);
+}
+
+.cinema-map-modal-head {
+  padding: 34px 72px 20px 34px;
+}
+
+.cinema-map-modal-head h2 {
+  margin: 0 0 14px;
+  color: #fff;
+  font-size: clamp(24px, 3vw, 34px);
+  line-height: 1.15;
+}
+
+.cinema-map-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.cinema-map-meta span {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.cinema-map-modal-head p {
+  color: #d9d9d9;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.cinema-map-frame,
+.cinema-map-empty {
+  display: block;
+  width: calc(100% - 68px);
+  height: min(48vh, 380px);
+  margin: 0 34px;
+  border: 0;
+  border-radius: 14px;
+  background: #101010;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.cinema-map-empty {
+  display: grid;
+  place-items: center;
+  color: #bfbfbf;
+  font-size: 18px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.cinema-map-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 18px 34px 30px;
 }
 
 /* .brand-badge */
@@ -2130,6 +2538,26 @@ select {
   font-size: 11px;
   font-weight: 700;
   backdrop-filter: blur(6px);
+}
+
+.movie-adv-booking-count {
+  position: absolute;
+  top: 44px;
+  left: 10px;
+  z-index: 2;
+  max-width: calc(100% - 20px);
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 11px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.74);
+  color: #fff;
+  backdrop-filter: blur(8px);
+  font-size: 12px;
+  font-weight: 900;
+  white-space: nowrap;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
 }
 
 .movie-adv-rating {
@@ -4510,4 +4938,140 @@ select {
   font-size: 12px;
   font-weight: 700;
   white-space: nowrap;
+}
+
+/* =====================================================================
+   HOME ADDITIONS RESPONSIVE
+   ===================================================================== */
+
+@media (max-width: 1100px) {
+  .featured-cinema-grid,
+  .footer-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .footer-brand-block {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 760px) {
+  .movies-section {
+    padding-top: 42px;
+  }
+
+  .movies-header,
+  .section-head-row {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .slider-controls {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .movie-card {
+    flex-basis: 180px;
+  }
+
+  .poster-wrap {
+    height: 254px;
+  }
+
+  .movie-slider-compact .movie-card {
+    flex-basis: 170px;
+  }
+
+  .movie-slider-compact .poster-wrap {
+    height: 240px;
+  }
+
+  .movies-section-actions {
+    justify-content: stretch;
+  }
+
+  .movies-section-actions .ghost-btn,
+  .section-head-row .ghost-btn {
+    width: 100%;
+  }
+
+  .coming-soon-block {
+    margin-top: 52px;
+  }
+
+  .featured-cinemas-section {
+    padding: 26px 0 58px;
+  }
+
+  .featured-cinema-grid,
+  .footer-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .booking-section {
+    padding-top: 18px;
+  }
+
+  .footer-grid {
+    gap: 24px;
+    padding-top: 36px;
+  }
+
+  .footer-bottom {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 560px) {
+  .section-kicker {
+    font-size: 12px;
+  }
+
+  .movies-header h2,
+  .section-head-row h2 {
+    font-size: 30px;
+  }
+
+  .movie-slider {
+    gap: 14px;
+  }
+
+  .featured-cinema-card {
+    min-height: 0;
+    padding: 18px;
+  }
+
+  .footer-brand {
+    font-size: 26px;
+  }
+
+  .cinema-card-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .cinema-card-footer .ant-btn {
+    width: 100%;
+  }
+
+  .cinema-map-modal-overlay {
+    padding: 14px;
+  }
+
+  .cinema-map-modal {
+    width: 100%;
+    max-height: 90vh;
+  }
+
+  .cinema-map-modal-head {
+    padding: 22px 58px 18px 18px;
+  }
+
+  .cinema-map-frame,
+  .cinema-map-empty {
+    height: 58vh;
+  }
 }

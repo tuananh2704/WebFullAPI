@@ -1,5 +1,17 @@
 import { useEffect, useState } from "react";
-import { BarChart3, Film, LogOut, UserRound } from "lucide-react";
+import {
+  BarChart3,
+  Clapperboard,
+  Film,
+  LogOut,
+  Mail,
+  MapPin,
+  Phone,
+  Play,
+  ShieldCheck,
+  Star,
+  UserRound,
+} from "lucide-react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getCurrentUser, hasAdminAccess, logout } from "../services/authService";
 import type { ApiUser } from "../types/api";
@@ -98,6 +110,76 @@ const MainLayout = () => {
       <main>
         <Outlet />
       </main>
+
+      {!isAdminUser && (
+        <footer className="site-footer">
+          <div className="container footer-grid">
+            <div className="footer-brand-block">
+              <NavLink className="brand footer-brand" to="/">
+                <span className="brand-mark">
+                  <Film size={26} strokeWidth={2.5} />
+                </span>
+                <span>CINEMAX</span>
+              </NavLink>
+              <p>
+                Hệ thống đặt vé xem phim, chọn rạp, chọn ghế và theo dõi ưu đãi
+                thành viên trong một trải nghiệm liền mạch.
+              </p>
+              <div className="footer-socials" aria-label="Mạng xã hội">
+                <a href="https://instagram.com" aria-label="Instagram">
+                  <Star size={18} />
+                </a>
+                <a href="https://youtube.com" aria-label="YouTube">
+                  <Play size={18} />
+                </a>
+                <a href="https://telegram.org" aria-label="Telegram">
+                  <Clapperboard size={18} />
+                </a>
+              </div>
+            </div>
+
+            <div className="footer-column">
+              <h2>Thông tin rạp</h2>
+              <a href="/cinemas">
+                <MapPin size={16} />
+                Hệ thống rạp
+              </a>
+              <a href="/movies">
+                <Film size={16} />
+                Lịch chiếu phim
+              </a>
+              <a href="/bookings">
+                <ShieldCheck size={16} />
+                Tra cứu đặt vé
+              </a>
+            </div>
+
+            <div className="footer-column">
+              <h2>Hotline</h2>
+              <a href="tel:19006017">
+                <Phone size={16} />
+                1900 6017
+              </a>
+              <a href="mailto:support@cinemax.vn">
+                <Mail size={16} />
+                support@cinemax.vn
+              </a>
+              <p>Hỗ trợ khách hàng mỗi ngày từ 8:00 đến 23:00.</p>
+            </div>
+
+            <div className="footer-column">
+              <h2>Chính sách</h2>
+              <a href="/membership">Thành viên VIP</a>
+              <a href="/bookings">Lịch sử giao dịch</a>
+              <a href="/auth">Tài khoản và bảo mật</a>
+            </div>
+          </div>
+          <div className="container footer-bottom">
+            <span>© 2026 CINEMAX</span>
+            <span>Đặt vé nhanh, giữ ghế rõ ràng, thanh toán minh bạch.</span>
+          </div>
+        </footer>
+      )}
     </div>
   );
 };
