@@ -239,7 +239,15 @@ setInterval(() => {
 
 const login = async ({ email, password }) => {
   const user = await findUserByEmail(email);
-  if (!user || user.status !== "ACTIVE") {
+  if (!user) {
+    throw new AppError("Invalid email or password", 401);
+  }
+
+  if (user.status === "BLOCKED") {
+    throw new AppError("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ hỗ trợ.", 403);
+  }
+
+  if (user.status !== "ACTIVE") {
     throw new AppError("Invalid email or password", 401);
   }
 

@@ -9,6 +9,9 @@ type CreateBookingPayload = {
     size_name: string;
     quantity: number;
   }>;
+  points_to_use?: number;
+  promotion_code?: string;
+  use_free_popcorn?: boolean;
 };
 
 export const createBooking = async (payload: CreateBookingPayload) => {

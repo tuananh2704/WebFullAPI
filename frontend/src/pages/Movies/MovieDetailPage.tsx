@@ -3,7 +3,12 @@ import { useParams, useSearchParams, useNavigate, Link } from "react-router-dom"
 import { Steps, Select, Tag, Spin, Empty, Modal, Result } from "antd";
 import { createBooking, getBookingDetail } from "../../services/bookingService";
 import { getFoodSizes, getFoods } from "../../services/foodService";
-import { getMovieById } from "../../services/movieService";
+import {
+  createMovieRating,
+  getCanRateMovie,
+  getMovieById,
+  getMovieRatings,
+} from "../../services/movieService";
 import { createPayment } from "../../services/paymentService";
 import { applyPromotion } from "../../services/promotionService";
 import { getSeatsByShowtime } from "../../services/seatService";
@@ -17,6 +22,8 @@ import type {
   ApiFoodSize,
   ApiMembershipInfo,
   ApiMovie,
+  ApiMovieRating,
+  ApiCanRateMovie,
   ApiSeat,
   ApiShowtime,
   ShowtimeByDate,
@@ -96,7 +103,7 @@ const getComboNumber = (name: string) => {
   return match ? Number(match[0]) : Number.MAX_SAFE_INTEGER;
 };
 
-const getComboImage = (food?: ApiFood) => {
+const getFoodImage = (food?: ApiFood) => {
   const imageUrl = food?.image_url?.trim();
   const foodName = food?.name || "";
 
@@ -118,6 +125,11 @@ const getComboImage = (food?: ApiFood) => {
     : 1;
 
   return `/images/foods/combo-${imageIndex}.svg`;
+};
+
+const getSizeOrder = (sizeName: string) => {
+  const order: Record<string, number> = { S: 1, M: 2, L: 3 };
+  return order[sizeName] || 99;
 };
 
 const generateNext30Days = (): string[] => {
@@ -152,6 +164,11 @@ const MovieDetailPage = () => {
   const movieId = Number(id);
   const preselectedCinemaId = Number(searchParams.get("cinema_id"));
   const preselectedDate = searchParams.get("date");
+  const showBookingFlow =
+    searchParams.get("booking") === "1" ||
+    searchParams.has("showtime_id") ||
+    searchParams.has("cinema_id") ||
+    searchParams.has("date");
 
   const [movie, setMovie] = useState<ApiMovie | null>(null);
   const [cinemas, setCinemas] = useState<ApiCinema[]>([]);
@@ -171,9 +188,18 @@ const MovieDetailPage = () => {
   const [foodSizes, setFoodSizes] = useState<ApiFoodSize[]>([]);
   const [selectedFoods, setSelectedFoods] = useState<SelectedFoodItem[]>([]);
   const [promotionCode, setPromotionCode] = useState("");
+  const [appliedPromotionCode, setAppliedPromotionCode] = useState("");
   const [discount, setDiscount] = useState(0);
   const [membershipInfo, setMembershipInfo] = useState<ApiMembershipInfo | null>(null);
+  const [useFreePopcorn, setUseFreePopcorn] = useState(
+    () => localStorage.getItem("cinemax_use_free_popcorn") === "1"
+  );
   const [message, setMessage] = useState("");
+  const [ratingReviews, setRatingReviews] = useState<ApiMovieRating[]>([]);
+  const [canRateMovie, setCanRateMovie] = useState<ApiCanRateMovie | null>(null);
+  const [ratingValue, setRatingValue] = useState(10);
+  const [ratingComment, setRatingComment] = useState("");
+  const [ratingLoading, setRatingLoading] = useState(false);
   const [loadingPage, setLoadingPage] = useState(true);
   const [loadingShowtimes, setLoadingShowtimes] = useState(false);
   const [bookingLoading, setBookingLoading] = useState(false);
@@ -204,17 +230,47 @@ const MovieDetailPage = () => {
 
   const next30Days = useMemo(() => generateNext30Days(), []);
 
+  const loadRatingState = async () => {
+    const ratings = await getMovieRatings(movieId);
+    setRatingReviews(ratings.reviews || []);
+    setMovie((current) =>
+      current
+        ? {
+            ...current,
+            rating: ratings.average_rating,
+            total_ratings: ratings.total_ratings,
+          }
+        : current
+    );
+
+    if (isLoggedIn()) {
+      const permission = await getCanRateMovie(movieId);
+      setCanRateMovie(permission);
+    } else {
+      setCanRateMovie({
+        canRate: false,
+        reason: "Bạn có thể đánh giá sau khi xem phim.",
+      });
+    }
+  };
+
   useEffect(() => {
     const load = async () => {
       try {
-        const [movieData, cinemaData, movieShowtimeData, foodData, sizeData] = await Promise.all([
+        const [movieData, cinemaData, movieShowtimeData, foodData, sizeData, ratingsData] = await Promise.all([
           getMovieById(movieId),
           getCinemas(),
           getShowtimesByMovie(movieId),
           getFoods(),
           getFoodSizes(),
+          getMovieRatings(movieId),
         ]);
-        setMovie(movieData);
+        setMovie({
+          ...movieData,
+          rating: ratingsData.average_rating || movieData.rating,
+          total_ratings: ratingsData.total_ratings ?? movieData.total_ratings,
+        });
+        setRatingReviews(ratingsData.reviews || []);
         setCinemas(cinemaData);
         const today = getTodayDateKey();
         setMovieShowtimes(
@@ -237,7 +293,16 @@ const MovieDetailPage = () => {
       getMyMembership()
         .then(setMembershipInfo)
         .catch(() => {});
+      getCanRateMovie(movieId)
+        .then(setCanRateMovie)
+        .catch(() => {
+          setCanRateMovie({
+            canRate: false,
+            reason: "Bạn có thể đánh giá sau khi xem phim.",
+          });
+        });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [movieId]);
 
   // Pre-select showtime from URL param ?showtime_id=X
@@ -359,18 +424,31 @@ const MovieDetailPage = () => {
     return new Map(foods.map((food) => [food.id, food]));
   }, [foods]);
 
-  const comboFoodSizes = useMemo(() => {
-    return foodSizes
-      .filter((size) => COMBO_NAME_PATTERN.test(size.food_name.trim()))
-      .sort((a, b) => {
-        const comboNumberDiff = getComboNumber(a.food_name) - getComboNumber(b.food_name);
-        if (comboNumberDiff !== 0) {
-          return comboNumberDiff;
-        }
+  const orderFoodSizes = useMemo(() => {
+    return [...foodSizes].sort((a, b) => {
+      const foodA = foodMap.get(a.food_id);
+      const foodB = foodMap.get(b.food_id);
+      const categoryA = foodA?.category_name || "";
+      const categoryB = foodB?.category_name || "";
+      const isComboA = COMBO_NAME_PATTERN.test(a.food_name.trim()) || categoryA === "Combo";
+      const isComboB = COMBO_NAME_PATTERN.test(b.food_name.trim()) || categoryB === "Combo";
 
-        return String(a.size_name).localeCompare(String(b.size_name), "vi");
-      });
-  }, [foodSizes]);
+      if (isComboA !== isComboB) {
+        return isComboA ? -1 : 1;
+      }
+
+      const categoryDiff = categoryA.localeCompare(categoryB, "vi");
+      if (categoryDiff !== 0) return categoryDiff;
+
+      const comboNumberDiff = getComboNumber(a.food_name) - getComboNumber(b.food_name);
+      if (comboNumberDiff !== 0) return comboNumberDiff;
+
+      const nameDiff = a.food_name.localeCompare(b.food_name, "vi");
+      if (nameDiff !== 0) return nameDiff;
+
+      return getSizeOrder(a.size_name) - getSizeOrder(b.size_name);
+    });
+  }, [foodMap, foodSizes]);
 
   const handleAddFood = (sizeId: number) => {
     const size = foodSizes.find((s) => s.id === sizeId);
@@ -418,6 +496,15 @@ const MovieDetailPage = () => {
     () => selectedFoods.reduce((sum, f) => sum + f.price * f.quantity, 0),
     [selectedFoods]
   );
+  const hasFreePopcornBenefit = useMemo(
+    () => Boolean(membershipInfo?.benefits.some((benefit) => benefit.benefit_key === "FREE_POPCORN")),
+    [membershipInfo]
+  );
+  const freePopcornDiscount = useMemo(() => {
+    if (!useFreePopcorn || !hasFreePopcornBenefit) return 0;
+    const comboOne = selectedFoods.find((food) => /^combo\s*1$/i.test(food.food_name.trim()));
+    return comboOne && comboOne.quantity > 0 ? comboOne.price : 0;
+  }, [hasFreePopcornBenefit, selectedFoods, useFreePopcorn]);
   const membershipDiscount = useMemo(() => {
     if (!membershipInfo || membershipInfo.tier.discount_percent === 0) return 0;
     return Math.round((seatTotal * membershipInfo.tier.discount_percent) / 100);
@@ -431,13 +518,21 @@ const MovieDetailPage = () => {
   }, [seatTotal, selectedShowtime]);
 
   const totalBeforeDiscount = seatTotal + foodTotal;
-  const finalAmount = Math.max(totalBeforeDiscount - membershipDiscount - tuesdayDiscount - discount, 0);
-  const hasAppliedDiscounts = membershipDiscount > 0 || tuesdayDiscount > 0 || discount > 0;
+  const finalAmount = Math.max(
+    totalBeforeDiscount - membershipDiscount - tuesdayDiscount - discount - freePopcornDiscount,
+    0
+  );
+  const hasAppliedDiscounts =
+    membershipDiscount > 0 || tuesdayDiscount > 0 || discount > 0 || freePopcornDiscount > 0;
+  const vipPointsAvailable = membershipInfo?.points_available || 0;
+  const vipPointsNeeded = Math.ceil(finalAmount / 1000);
+  const canPayWithVipPoints = loggedIn && finalAmount > 0 && vipPointsAvailable >= vipPointsNeeded;
 
   const handleChooseShowtime = async (showtime: ApiShowtime) => {
     setSelectedShowtime(showtime);
     setSelectedSeats([]);
     setDiscount(0);
+    setAppliedPromotionCode("");
     setMessage("");
     try {
       setSeats(await getSeatsByShowtime(showtime.id));
@@ -453,13 +548,59 @@ const MovieDetailPage = () => {
     );
   };
 
+  const handlePromotionCodeChange = (value: string) => {
+    setPromotionCode(value);
+    setAppliedPromotionCode("");
+    setDiscount(0);
+  };
+
   const handleApplyPromotion = async () => {
     try {
       const data: any = await applyPromotion({ code: promotionCode, total_amount: totalBeforeDiscount });
       setDiscount(Number(data.discount_amount || 0));
+      setAppliedPromotionCode(promotionCode.trim());
       setMessage("✅ Áp dụng mã khuyến mãi thành công!");
     } catch (error: any) {
       setMessage(error.response?.data?.message || "Mã khuyến mãi không hợp lệ.");
+    }
+  };
+
+  const handleSubmitRating = async () => {
+    if (!canRateMovie?.bookingId) {
+      setMessage(canRateMovie?.reason || "Bạn có thể đánh giá sau khi xem phim.");
+      return;
+    }
+
+    setRatingLoading(true);
+    setMessage("");
+    try {
+      const ratings = await createMovieRating(movieId, {
+        bookingId: canRateMovie.bookingId,
+        rating: ratingValue,
+        comment: ratingComment,
+      });
+
+      setRatingReviews(ratings.reviews || []);
+      const latestMovie = await getMovieById(movieId);
+      setMovie({
+        ...latestMovie,
+        rating: ratings.average_rating || latestMovie.rating,
+        total_ratings: ratings.total_ratings ?? latestMovie.total_ratings,
+      });
+      await loadRatingState();
+      setRatingComment("");
+      setCanRateMovie({
+        canRate: false,
+        reason: "Bạn đã đánh giá phim này.",
+      });
+      setMessage("Đánh giá thành công! Bạn được cộng 1 điểm VIP.");
+      getMyMembership()
+        .then(setMembershipInfo)
+        .catch(() => {});
+    } catch (error: any) {
+      setMessage(error.response?.data?.message || "Không gửi được đánh giá.");
+    } finally {
+      setRatingLoading(false);
     }
   };
 
@@ -472,6 +613,13 @@ const MovieDetailPage = () => {
     }
     return `CK ${code}`;
   };
+
+  const buildFoodPayload = () =>
+    selectedFoods.map((f) => ({
+      food_id: f.food_id,
+      size_name: f.size_name,
+      quantity: f.quantity,
+    }));
 
   // Create the pending booking first, then show transfer instructions.
   const handlePayAndBook = async () => {
@@ -492,23 +640,28 @@ const MovieDetailPage = () => {
     setBookingLoading(true);
     setMessage("");
     try {
-      const foodPayload = selectedFoods.map((f) => ({
-        food_id: f.food_id,
-        size_name: f.size_name,
-        quantity: f.quantity,
-      }));
+      const foodPayload = buildFoodPayload();
 
       // Step 1: Create booking (stays PENDING)
       const booking: any = await createBooking({
         showtime_id: selectedShowtime.id,
         seat_ids: selectedSeats,
         foods: foodPayload,
+        promotion_code: appliedPromotionCode || undefined,
+        use_free_popcorn: freePopcornDiscount > 0,
       });
 
       const nextTransferContent = `CK ${booking.booking_code || generateTransferContent()}`;
       setTransferContent(nextTransferContent);
       setTicketData(booking);
       setShowPaymentModal(true);
+      if (freePopcornDiscount > 0) {
+        localStorage.removeItem("cinemax_use_free_popcorn");
+        setUseFreePopcorn(false);
+        getMyMembership()
+          .then(setMembershipInfo)
+          .catch(() => {});
+      }
 
       try {
         // Step 2: Create payment as BANK_TRANSFER (stays PENDING, no auto-confirm).
@@ -533,6 +686,62 @@ const MovieDetailPage = () => {
     }
   };
 
+  const handlePayWithVipPoints = async () => {
+    if (!loggedIn) {
+      setMessage("Bạn cần đăng nhập trước khi thanh toán.");
+      return;
+    }
+    if (!selectedShowtime || selectedSeats.length === 0) {
+      setMessage("Chọn suất chiếu và ghế trước khi thanh toán.");
+      return;
+    }
+    if (ageRestricted) {
+      setMessage(`Bạn chưa đủ ${minimumAge} tuổi để đặt vé phim ${movie?.age_rating}.`);
+      return;
+    }
+    if (!canPayWithVipPoints) {
+      setMessage(`Bạn cần ${vipPointsNeeded} điểm VIP để thanh toán đơn này.`);
+      return;
+    }
+
+    setBookingLoading(true);
+    setMessage("");
+    try {
+      const booking: any = await createBooking({
+        showtime_id: selectedShowtime.id,
+        seat_ids: selectedSeats,
+        foods: buildFoodPayload(),
+        points_to_use: vipPointsNeeded,
+        promotion_code: appliedPromotionCode || undefined,
+        use_free_popcorn: freePopcornDiscount > 0,
+      });
+
+      await createPayment({
+        booking_id: booking.id,
+        payment_method: "CASH",
+        amount: 0,
+      });
+
+      const detail = await getBookingDetail(booking.id);
+      setTicketData(detail);
+      setShowPaymentModal(false);
+      setTransferContent("");
+      setMessage("Đơn thanh toán bằng điểm VIP đang chờ admin duyệt.");
+      if (freePopcornDiscount > 0) {
+        localStorage.removeItem("cinemax_use_free_popcorn");
+        setUseFreePopcorn(false);
+      }
+      getMyMembership()
+        .then(setMembershipInfo)
+        .catch(() => {});
+    } catch (error: any) {
+      setAppliedPromotionCode("");
+      setMessage(error.response?.data?.message || "Không thanh toán được bằng điểm VIP.");
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
   const handleConfirmTransfer = () => {
     setShowPaymentModal(false);
   };
@@ -542,6 +751,7 @@ const MovieDetailPage = () => {
     setSelectedSeats([]);
     setDiscount(0);
     setPromotionCode("");
+    setAppliedPromotionCode("");
     setSelectedFoods([]);
     setMessage("");
     // Reload seats to reflect newly booked seats
@@ -584,7 +794,9 @@ const MovieDetailPage = () => {
               {movie?.duration && <Tag color="blue">⏱ {movie.duration} phút</Tag>}
               {movie?.language && <Tag color="cyan">🌐 {movie.language}</Tag>}
               {movie?.age_rating && <Tag color="red">{movie.age_rating}</Tag>}
-              {movie?.rating && <Tag color="gold">⭐ {Number(movie.rating).toFixed(1)}</Tag>}
+              <Tag color="gold">
+                ⭐ {Number(movie?.rating || 0).toFixed(1)} ({Number(movie?.total_ratings || 0)} đánh giá)
+              </Tag>
               {movie?.director && <Tag color="purple">🎬 {movie.director}</Tag>}
             </div>
             {movie?.genres && movie.genres.length > 0 && (
@@ -607,8 +819,82 @@ const MovieDetailPage = () => {
           </div>
         </div>
 
+        {!showBookingFlow && (
+        <section className="movie-reviews-section">
+          <div className="movie-reviews-heading">
+            <div>
+              <p className="eyebrow">CINEMAX</p>
+              <h2>Đánh giá phim</h2>
+            </div>
+            <div className="movie-review-score">
+              <span>⭐ {Number(movie?.rating || 0).toFixed(1)}</span>
+              <small>{Number(movie?.total_ratings || 0)} đánh giá</small>
+            </div>
+          </div>
+
+          {canRateMovie?.canRate ? (
+            <div className="movie-rating-form">
+              <label>
+                Điểm đánh giá
+                <select
+                  value={ratingValue}
+                  onChange={(event) => setRatingValue(Number(event.target.value))}
+                >
+                  {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Nhận xét
+                <textarea
+                  rows={3}
+                  placeholder="Chia sẻ cảm nhận của bạn về bộ phim"
+                  value={ratingComment}
+                  onChange={(event) => setRatingComment(event.target.value)}
+                />
+              </label>
+              <button
+                className="primary-btn form-submit movie-rating-submit"
+                disabled={ratingLoading}
+                onClick={handleSubmitRating}
+              >
+                {ratingLoading ? "Đang gửi..." : "Gửi đánh giá"}
+              </button>
+            </div>
+          ) : (
+            <p className="movie-rating-note">
+              {canRateMovie?.reason || "Bạn có thể đánh giá sau khi xem phim."}
+            </p>
+          )}
+
+          <div className="movie-review-list">
+            {ratingReviews.length === 0 ? (
+              <p className="muted">Chưa có đánh giá nào.</p>
+            ) : (
+              ratingReviews.map((review) => (
+                <article className="movie-review-card" key={review.id}>
+                  <div className="movie-review-card-head">
+                    <strong>{review.full_name}</strong>
+                    <span>⭐ {Number(review.rating).toFixed(1)}</span>
+                  </div>
+                  {review.comment && <p>{review.comment}</p>}
+                  <time dateTime={review.created_at}>
+                    {new Date(review.created_at).toLocaleDateString("vi-VN")}
+                  </time>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
+        )}
+
+        {message && <p className="section-state warning">{message}</p>}
+
         {/* Login prompt */}
-        {!loggedIn && (
+        {showBookingFlow && !loggedIn && (
           <div className="auth-prompt-banner">
             <span>⚠️ Bạn cần đăng nhập để đặt vé.</span>
             <Link to="/auth" className="primary-btn compact">
@@ -617,7 +903,7 @@ const MovieDetailPage = () => {
           </div>
         )}
 
-        {ageRestricted && (
+        {showBookingFlow && ageRestricted && (
           <div className="auth-prompt-banner warning">
             <span>
               Phim này dành cho khán giả từ {minimumAge} tuổi.
@@ -627,14 +913,14 @@ const MovieDetailPage = () => {
           </div>
         )}
 
-        {loggedIn && currentUser && (
+        {showBookingFlow && loggedIn && currentUser && (
           <div className="user-welcome-banner">
             <span>👋 Xin chào, <strong>{currentUser.full_name}</strong> ({currentUser.email})</span>
           </div>
         )}
 
         {/* Steps indicator */}
-        <div className="booking-steps-wrap">
+        {showBookingFlow && <div className="booking-steps-wrap">
           <Steps
             current={currentStep}
             size="small"
@@ -646,12 +932,10 @@ const MovieDetailPage = () => {
               { title: "Hoàn thành" },
             ]}
           />
-        </div>
-
-        {message && <p className="section-state warning">{message}</p>}
+        </div>}
 
         {/* Ticket already booked — pending approval state */}
-        {ticketData && (
+        {showBookingFlow && ticketData && (
           <div className="ticket-success-section">
             <Result
               status={ticketData.booking_status === "CONFIRMED" ? "success" : "info"}
@@ -744,7 +1028,7 @@ const MovieDetailPage = () => {
         )}
 
         {/* Booking flow — only show if no ticket yet */}
-        {!ticketData && (
+        {showBookingFlow && !ticketData && (
           <div className="booking-flow-stacked">
               {/* Step 1: Chọn rạp */}
               <div className="data-card">
@@ -925,9 +1209,9 @@ const MovieDetailPage = () => {
                 <div className="checkout-row">
                   {/* Food */}
                   <div className="data-card">
-                    <h2>3. Combo</h2>
+                    <h2>3. Combo / đồ ăn thêm</h2>
                     <div className="food-selection-grid">
-                      {comboFoodSizes.map((size) => {
+                      {orderFoodSizes.map((size) => {
                         const food = foodMap.get(size.food_id);
                         const selected = selectedFoods.find((f) => f.sizeId === size.id);
                         return (
@@ -935,15 +1219,22 @@ const MovieDetailPage = () => {
                             <div className="food-item-main">
                               <img
                                 className="food-item-image"
-                                src={getComboImage(food)}
+                                src={getFoodImage(food)}
                                 alt={size.food_name}
                                 loading="lazy"
                               />
                               <div className="food-item-info">
                                 <strong>{size.food_name}</strong>
                                 {food?.description && <small>{food.description}</small>}
+                                {food?.category_name && <small>{food.category_name}</small>}
                                 <small>Size {size.size_name}</small>
-                                <span className="food-item-price">{formatCurrency(size.price)}</span>
+                                <span className="food-item-price">
+                                  {useFreePopcorn &&
+                                  hasFreePopcornBenefit &&
+                                  /^combo\s*1$/i.test(size.food_name.trim())
+                                    ? "Miễn phí 1 phần"
+                                    : formatCurrency(size.price)}
+                                </span>
                               </div>
                             </div>
                             <div className="food-item-actions">
@@ -965,8 +1256,8 @@ const MovieDetailPage = () => {
                           </div>
                         );
                       })}
-                      {comboFoodSizes.length === 0 && (
-                        <Empty description="Chưa có combo" style={{ color: "#888", marginTop: 16 }} />
+                      {orderFoodSizes.length === 0 && (
+                        <Empty description="Chưa có đồ ăn" style={{ color: "#888", marginTop: 16 }} />
                       )}
                     </div>
                   </div>
@@ -975,7 +1266,7 @@ const MovieDetailPage = () => {
                   <div className="data-card">
                     <h2>Mã khuyến mãi</h2>
                     <div className="inline-form">
-                      <input placeholder="Nhập mã: SALE10" value={promotionCode} onChange={(e) => setPromotionCode(e.target.value)} />
+                      <input placeholder="Nhập mã: SALE10" value={promotionCode} onChange={(e) => handlePromotionCodeChange(e.target.value)} />
                       <button onClick={handleApplyPromotion}>Áp dụng</button>
                     </div>
                   </div>
@@ -1018,6 +1309,12 @@ const MovieDetailPage = () => {
                           <span>-{formatCurrency(discount)}</span>
                         </div>
                       )}
+                      {freePopcornDiscount > 0 && (
+                        <div className="payment-line payment-discount-line">
+                          <span>Bỏng ngô miễn phí - Combo 1</span>
+                          <span>-{formatCurrency(freePopcornDiscount)}</span>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -1031,7 +1328,6 @@ const MovieDetailPage = () => {
                     className="primary-btn form-submit pay-btn"
                     onClick={handlePayAndBook}
                     disabled={!loggedIn || ageRestricted || !selectedShowtime || selectedSeats.length === 0 || bookingLoading}
-                    style={{ width: "100%", marginTop: 16 }}
                   >
                     {bookingLoading ? (
                       <>⏳ Đang xử lý...</>
@@ -1041,8 +1337,25 @@ const MovieDetailPage = () => {
                       <>🎟 Thanh toán chuyển khoản</>
                     )}
                   </button>
+                  <button
+                    className="primary-btn form-submit pay-btn vip-point-pay-btn"
+                    onClick={handlePayWithVipPoints}
+                    disabled={
+                      !loggedIn ||
+                      ageRestricted ||
+                      !selectedShowtime ||
+                      selectedSeats.length === 0 ||
+                      bookingLoading ||
+                      !canPayWithVipPoints
+                    }
+                  >
+                    {bookingLoading ? "Đang xử lý..." : "Dùng điểm VIP"}
+                  </button>
                   <p className="muted" style={{ textAlign: "center", marginTop: 8, fontSize: 12 }}>
                     Chuyển khoản ngân hàng — Chờ admin duyệt
+                  </p>
+                  <p className={`muted vip-point-pay-note ${canPayWithVipPoints ? "ready" : "missing"}`}>
+                    VIP: cần {vipPointsNeeded} điểm, hiện có {vipPointsAvailable} điểm
                   </p>
                 </div>
               </div>

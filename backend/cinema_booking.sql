@@ -1413,3 +1413,42 @@ SET age_rating = CASE
 END;
 ALTER TABLE payments
   MODIFY payment_method ENUM('CASH','MOMO','VNPAY','ZALOPAY','BANK_TRANSFER');
+
+
+// them db 06/06
+
+USE cinema_booking;
+ALTER TABLE movies
+ADD COLUMN total_ratings INT DEFAULT 0;
+
+SHOW COLUMNS FROM users;
+SHOW COLUMNS FROM bookings;
+
+USE cinema_booking;
+
+CREATE TABLE movie_ratings (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    movie_id BIGINT NOT NULL,
+    booking_id BIGINT NULL,
+    rating DECIMAL(3,1) NOT NULL,
+    comment TEXT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_movie_ratings_user
+        FOREIGN KEY (user_id) REFERENCES users(id),
+
+    CONSTRAINT fk_movie_ratings_movie
+        FOREIGN KEY (movie_id) REFERENCES movies(id),
+
+    CONSTRAINT fk_movie_ratings_booking
+        FOREIGN KEY (booking_id) REFERENCES bookings(id),
+
+    UNIQUE KEY uq_user_movie_rating (user_id, movie_id),
+
+    CHECK (rating >= 1 AND rating <= 10)
+);
+
+
+DESCRIBE movie_ratings;

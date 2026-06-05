@@ -1,0 +1,2 @@
+ALTER TABLE movie_ratings
+MODIFY rating DECIMAL(3,1) NOT NULL;

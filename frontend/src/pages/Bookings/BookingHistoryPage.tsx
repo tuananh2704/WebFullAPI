@@ -8,7 +8,8 @@ import {
   Sofa,
 } from "lucide-react";
 import { getBookingDetail, getBookingHistory } from "../../services/bookingService";
-import type { ApiBookingSummary } from "../../types/api";
+import { createMovieRating, getCanRateMovie } from "../../services/movieService";
+import type { ApiBookingSummary, ApiCanRateMovie } from "../../types/api";
 import { formatCurrency, formatDateTime } from "../../utils/format";
 
 const statusLabels: Record<string, string> = {
@@ -23,12 +24,28 @@ const BookingHistoryPage = () => {
   const [message, setMessage] = useState("");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [canRateMovie, setCanRateMovie] = useState<ApiCanRateMovie | null>(null);
+  const [ratingValue, setRatingValue] = useState(10);
+  const [ratingComment, setRatingComment] = useState("");
+  const [ratingLoading, setRatingLoading] = useState(false);
 
   const handleViewDetail = async (id: number) => {
     try {
       setSelectedId(id);
       setLoadingDetail(true);
-      setDetail(await getBookingDetail(id));
+      setCanRateMovie(null);
+      const bookingDetail = await getBookingDetail(id);
+      setDetail(bookingDetail);
+      if (bookingDetail.movie_id) {
+        getCanRateMovie(Number(bookingDetail.movie_id))
+          .then(setCanRateMovie)
+          .catch(() => {
+            setCanRateMovie({
+              canRate: false,
+              reason: "Bạn có thể đánh giá sau khi xem phim.",
+            });
+          });
+      }
     } catch (error: any) {
       setMessage(error.response?.data?.message || "Không tải được chi tiết booking.");
     } finally {
@@ -50,6 +67,40 @@ const BookingHistoryPage = () => {
   const totalTickets = bookings.length;
   const confirmedTickets = bookings.filter((booking) => booking.booking_status === "CONFIRMED").length;
   const totalSpent = bookings.reduce((sum, booking) => sum + Number(booking.total_amount || 0), 0);
+  const detailPayments = detail?.payments || [];
+  const detailPaymentSuccess =
+    detailPayments.length === 0 ||
+    detailPayments.some((payment: any) => payment.payment_status === "SUCCESS");
+  const detailEnded = detail?.end_time ? new Date(detail.end_time).getTime() < Date.now() : false;
+  const showBookingRating =
+    Boolean(detail?.movie_id) &&
+    detail?.booking_status === "CONFIRMED" &&
+    detailPaymentSuccess &&
+    detailEnded;
+
+  const handleSubmitBookingRating = async () => {
+    if (!detail?.movie_id || !detail?.id) return;
+
+    setRatingLoading(true);
+    setMessage("");
+    try {
+      await createMovieRating(Number(detail.movie_id), {
+        bookingId: Number(detail.id),
+        rating: ratingValue,
+        comment: ratingComment,
+      });
+      setRatingComment("");
+      setCanRateMovie({
+        canRate: false,
+        reason: "Bạn đã đánh giá phim này.",
+      });
+      setMessage("Đánh giá thành công! Bạn được cộng 1 điểm VIP.");
+    } catch (error: any) {
+      setMessage(error.response?.data?.message || "Không gửi được đánh giá.");
+    } finally {
+      setRatingLoading(false);
+    }
+  };
 
   return (
     <section className="app-page">
@@ -242,6 +293,53 @@ const BookingHistoryPage = () => {
                         </div>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {showBookingRating && (
+                  <div className="booking-detail-section booking-rating-section">
+                    <h3>
+                      <Clapperboard size={18} />
+                      Đánh giá phim
+                    </h3>
+                    {canRateMovie?.canRate ? (
+                      <div className="booking-rating-form">
+                        <label>
+                          Điểm
+                          <select
+                            value={ratingValue}
+                            onChange={(event) => setRatingValue(Number(event.target.value))}
+                          >
+                            {Array.from({ length: 10 }, (_, index) => index + 1).map((value) => (
+                              <option key={value} value={value}>
+                                {value}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Nhận xét
+                          <textarea
+                            rows={3}
+                            placeholder="Bạn thấy phim này thế nào?"
+                            value={ratingComment}
+                            onChange={(event) => setRatingComment(event.target.value)}
+                          />
+                        </label>
+                        <button
+                          className="primary-btn booking-rating-submit"
+                          disabled={ratingLoading}
+                          onClick={handleSubmitBookingRating}
+                          type="button"
+                        >
+                          {ratingLoading ? "Đang gửi..." : "Gửi đánh giá"}
+                        </button>
+                      </div>
+                    ) : (
+                      <p className="movie-rating-note">
+                        {canRateMovie?.reason || "Bạn có thể đánh giá sau khi xem phim."}
+                      </p>
+                    )}
                   </div>
                 )}
               </>

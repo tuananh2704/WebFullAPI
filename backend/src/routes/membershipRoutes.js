@@ -12,5 +12,7 @@ router.use(authMiddleware);
 router.get("/me", membershipController.getMembership);
 router.get("/history", membershipController.getTierHistory);
 router.get("/benefits/usage", membershipController.getBenefitUsage);
+router.get("/vouchers", membershipController.getUserVouchers);
+router.post("/vouchers/exchange", membershipController.exchangePointsForVoucher);
 
 module.exports = router;

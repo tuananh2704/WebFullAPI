@@ -4,7 +4,7 @@ const AppError = require("../utils/AppError");
 const movieSelect = `
   SELECT
     m.id, m.title, m.description, m.director, m.duration, m.release_date, m.poster_url,
-    m.trailer_url, m.language, m.age_rating, m.rating, m.status,
+    m.trailer_url, m.language, m.age_rating, m.rating, m.total_ratings, m.status,
     (
       SELECT COUNT(*)
       FROM bookings b
@@ -252,6 +252,182 @@ const getTrailerMovies = async () => {
   return rows;
 };
 
+const getMovieRatings = async (movieId) => {
+  await getMovieById(movieId);
+
+  const [reviews] = await pool.execute(
+    `
+    SELECT
+      mr.id, mr.user_id, u.full_name, mr.rating, mr.comment, mr.created_at
+    FROM movie_ratings mr
+    JOIN users u ON u.id = mr.user_id
+    WHERE mr.movie_id = ?
+    ORDER BY mr.created_at DESC, mr.id DESC
+    `,
+    [movieId]
+  );
+
+  const [summaryRows] = await pool.execute(
+    `
+    SELECT rating AS average_rating, total_ratings
+    FROM movies
+    WHERE id = ?
+    LIMIT 1
+    `,
+    [movieId]
+  );
+
+  return {
+    reviews,
+    average_rating: summaryRows[0]?.average_rating || 0,
+    total_ratings: summaryRows[0]?.total_ratings || 0,
+  };
+};
+
+const findRateableBooking = async (connection, movieId, userId, bookingId = null) => {
+  const bookingFilter = bookingId ? "AND b.id = ?" : "";
+  const params = bookingId ? [userId, movieId, bookingId] : [userId, movieId];
+
+  const [rows] = await connection.execute(
+    `
+    SELECT b.id
+    FROM bookings b
+    JOIN showtimes s ON s.id = b.showtime_id
+    WHERE b.user_id = ?
+      AND s.movie_id = ?
+      ${bookingFilter}
+      AND b.booking_status = 'CONFIRMED'
+      AND s.end_time < NOW()
+      AND (
+        NOT EXISTS (SELECT 1 FROM payments p WHERE p.booking_id = b.id)
+        OR EXISTS (
+          SELECT 1
+          FROM payments p
+          WHERE p.booking_id = b.id AND p.payment_status = 'SUCCESS'
+        )
+      )
+    ORDER BY s.end_time DESC, b.id DESC
+    LIMIT 1
+    `,
+    params
+  );
+
+  return rows[0] || null;
+};
+
+const getCanRateMovie = async (movieId, userId) => {
+  await getMovieById(movieId);
+
+  const [ratedRows] = await pool.execute(
+    "SELECT id FROM movie_ratings WHERE user_id = ? AND movie_id = ? LIMIT 1",
+    [userId, movieId]
+  );
+
+  if (ratedRows[0]) {
+    return {
+      canRate: false,
+      reason: "Bạn đã đánh giá phim này.",
+    };
+  }
+
+  const booking = await findRateableBooking(pool, movieId, userId);
+  if (!booking) {
+    return {
+      canRate: false,
+      reason: "Bạn có thể đánh giá sau khi xem phim.",
+    };
+  }
+
+  return {
+    canRate: true,
+    reason: "Bạn có thể đánh giá phim này.",
+    bookingId: booking.id,
+  };
+};
+
+const createMovieRating = async ({ movieId, userId, bookingId, rating, comment }) => {
+  const normalizedRating = Number(rating);
+  const normalizedBookingId = Number(bookingId);
+
+  if (!Number.isFinite(normalizedBookingId) || normalizedBookingId <= 0) {
+    throw new AppError("bookingId is required", 400);
+  }
+
+  if (!Number.isFinite(normalizedRating) || normalizedRating < 1 || normalizedRating > 10) {
+    throw new AppError("Rating must be from 1 to 10", 400);
+  }
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [movieRows] = await connection.execute("SELECT id FROM movies WHERE id = ? LIMIT 1", [
+      movieId,
+    ]);
+    if (!movieRows[0]) {
+      throw new AppError("Movie not found", 404);
+    }
+
+    const [ratedRows] = await connection.execute(
+      "SELECT id FROM movie_ratings WHERE user_id = ? AND movie_id = ? LIMIT 1 FOR UPDATE",
+      [userId, movieId]
+    );
+    if (ratedRows[0]) {
+      throw new AppError("Bạn đã đánh giá phim này.", 409);
+    }
+
+    const booking = await findRateableBooking(connection, movieId, userId, normalizedBookingId);
+    if (!booking) {
+      throw new AppError("Booking không đủ điều kiện để đánh giá phim này.", 403);
+    }
+
+    await connection.execute(
+      `
+      INSERT INTO movie_ratings(user_id, movie_id, booking_id, rating, comment)
+      VALUES (?, ?, ?, ?, ?)
+      `,
+      [userId, movieId, normalizedBookingId, normalizedRating, comment?.trim() || null]
+    );
+
+    await connection.execute(
+      `
+      UPDATE movies m
+      SET
+        m.rating = (
+          SELECT ROUND(AVG(mr.rating), 1)
+          FROM movie_ratings mr
+          WHERE mr.movie_id = m.id
+        ),
+        m.total_ratings = (
+          SELECT COUNT(*)
+          FROM movie_ratings mr
+          WHERE mr.movie_id = m.id
+        )
+      WHERE m.id = ?
+      `,
+      [movieId]
+    );
+
+    await connection.execute(
+      `
+      INSERT INTO user_memberships(user_id, tier_id, total_spend, points)
+      VALUES (?, 1, 0, 1)
+      ON DUPLICATE KEY UPDATE points = points + 1
+      `,
+      [userId]
+    );
+
+    await connection.commit();
+    return getMovieRatings(movieId);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
 module.exports = {
   getMovies,
   getMovieById,
@@ -259,4 +435,7 @@ module.exports = {
   updateMovie,
   deleteMovie,
   getTrailerMovies,
+  getMovieRatings,
+  getCanRateMovie,
+  createMovieRating,
 };

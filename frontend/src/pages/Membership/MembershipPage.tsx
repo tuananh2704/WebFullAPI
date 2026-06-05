@@ -2,21 +2,40 @@ import React, { useEffect, useState } from "react";
 import {
   Award,
   ChevronRight,
+  Copy,
   Crown,
   Gift,
   History,
+  X,
   Sparkles,
   Star,
   TrendingUp,
   Zap,
 } from "lucide-react";
-import { getMyMembership, getAllTiers, getTierHistory } from "../../services/membershipService";
+import {
+  exchangeVoucher,
+  getBenefitUsage,
+  getMyMembership,
+  getAllTiers,
+  getTierHistory,
+  getMyVouchers,
+} from "../../services/membershipService";
 import { formatCurrency, formatDateTime } from "../../utils/format";
 import type {
   ApiMembershipInfo,
   ApiMembershipTier,
+  ApiBenefitUsage,
   ApiTierHistory,
+  ApiUserVoucher,
 } from "../../types/api";
+
+const voucherOptions = [
+  { discount: 50000, points: 50 },
+  { discount: 100000, points: 100 },
+  { discount: 200000, points: 200 },
+];
+
+const voucherPageSize = 5;
 
 const tierIcons: Record<string, React.ReactNode> = {
   "Thành viên": <Star size={22} />,
@@ -35,25 +54,52 @@ const benefitIcons: Record<string, React.ReactNode> = {
   LOUNGE_ACCESS: <Crown size={18} />,
 };
 
+const benefitLabels: Record<string, string> = {
+  FREE_POPCORN: "Bỏng ngô miễn phí",
+  FREE_COMBO: "Combo miễn phí",
+  FREE_UPGRADE_SEAT: "Nâng hạng ghế miễn phí",
+  BIRTHDAY_GIFT: "Quà sinh nhật",
+  LOUNGE_ACCESS: "Lounge VIP",
+};
+
+const voucherStatusLabels: Record<ApiUserVoucher["status"], string> = {
+  AVAILABLE: "Chưa sử dụng",
+  RESERVED: "Đang chờ duyệt",
+  USED: "Đã sử dụng",
+};
+
 const MembershipPage = () => {
   const [membership, setMembership] = useState<ApiMembershipInfo | null>(null);
   const [tiers, setTiers] = useState<ApiMembershipTier[]>([]);
   const [history, setHistory] = useState<ApiTierHistory[]>([]);
+  const [benefitUsage, setBenefitUsage] = useState<ApiBenefitUsage[]>([]);
+  const [vouchers, setVouchers] = useState<ApiUserVoucher[]>([]);
   const [activeTab, setActiveTab] = useState<"overview" | "tiers" | "history">("overview");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [voucherMessage, setVoucherMessage] = useState("");
+  const [voucherLoading, setVoucherLoading] = useState<number | null>(null);
+  const [voucherPage, setVoucherPage] = useState(1);
+  const [exchangeRequest, setExchangeRequest] = useState<{ discount: number; points: number } | null>(null);
+  const [freePopcornPending, setFreePopcornPending] = useState(
+    () => localStorage.getItem("cinemax_use_free_popcorn") === "1"
+  );
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [membershipData, tiersData, historyData] = await Promise.all([
+        const [membershipData, tiersData, historyData, usageData, voucherData] = await Promise.all([
           getMyMembership(),
           getAllTiers(),
           getTierHistory(),
+          getBenefitUsage(),
+          getMyVouchers(),
         ]);
         setMembership(membershipData);
         setTiers(tiersData);
         setHistory(historyData);
+        setBenefitUsage(usageData);
+        setVouchers(voucherData);
       } catch (err: any) {
         setError(err.response?.data?.message || "Bạn cần đăng nhập để xem thông tin membership.");
       } finally {
@@ -62,7 +108,62 @@ const MembershipPage = () => {
     };
 
     fetchData();
+
+    const interval = window.setInterval(fetchData, 5000);
+    return () => window.clearInterval(interval);
   }, []);
+
+  const refreshMembershipAndVouchers = async () => {
+    const [membershipData, voucherData] = await Promise.all([getMyMembership(), getMyVouchers()]);
+    setMembership(membershipData);
+    setVouchers(voucherData);
+  };
+
+  const voucherTotalPages = Math.max(1, Math.ceil(vouchers.length / voucherPageSize));
+  const currentVoucherPage = Math.min(voucherPage, voucherTotalPages);
+  const visibleVouchers = vouchers.slice(
+    (currentVoucherPage - 1) * voucherPageSize,
+    currentVoucherPage * voucherPageSize
+  );
+
+  const handleExchangeVoucher = async (discountAmount: number) => {
+    const option = voucherOptions.find((item) => item.discount === discountAmount);
+    if (!option) return;
+
+    setExchangeRequest({ discount: discountAmount, points: option.points });
+  };
+
+  const confirmExchangeVoucher = async () => {
+    if (!exchangeRequest) return;
+
+    setVoucherLoading(exchangeRequest.discount);
+    setVoucherMessage("");
+    try {
+      const voucher = await exchangeVoucher(exchangeRequest.discount);
+      await refreshMembershipAndVouchers();
+      setVoucherPage(1);
+      setExchangeRequest(null);
+      setVoucherMessage(`Đã đổi voucher ${voucher.code}.`);
+    } catch (err: any) {
+      setVoucherMessage(err.response?.data?.message || "Không đổi được voucher.");
+    } finally {
+      setVoucherLoading(null);
+    }
+  };
+
+  const handleCopyVoucher = async (code: string) => {
+    try {
+      await navigator.clipboard.writeText(code);
+      setVoucherMessage(`Đã sao chép mã ${code}.`);
+    } catch {
+      setVoucherMessage(`Mã voucher: ${code}`);
+    }
+  };
+
+  const handleUseFreePopcorn = () => {
+    localStorage.setItem("cinemax_use_free_popcorn", "1");
+    setFreePopcornPending(true);
+  };
 
   if (loading) {
     return (
@@ -211,6 +312,26 @@ const MembershipPage = () => {
                         <strong>{benefit.label}</strong>
                         {benefit.value && <small>{benefit.value}</small>}
                       </div>
+                      {benefit.benefit_key === "FREE_POPCORN" && (
+                        <button
+                          className={`benefit-use-btn ${
+                            benefit.used_this_month && benefit.used_this_month > 0
+                              ? "used"
+                              : freePopcornPending
+                              ? "pending"
+                              : ""
+                          }`}
+                          type="button"
+                          onClick={handleUseFreePopcorn}
+                          disabled={freePopcornPending || (benefit.used_this_month || 0) > 0}
+                        >
+                          {benefit.used_this_month && benefit.used_this_month > 0
+                            ? "Đã sử dụng"
+                            : freePopcornPending
+                            ? "Đang chờ sử dụng"
+                            : "Sử dụng"}
+                        </button>
+                      )}
                       {benefit.used_this_month !== undefined && benefit.used_this_month > 0 && (
                         <span className="benefit-used">
                           Đã dùng {benefit.used_this_month} lần
@@ -242,6 +363,130 @@ const MembershipPage = () => {
               <p className="muted points-note">
                 1 điểm = 1.000đ khi thanh toán · 10.000đ chi tiêu = 1 điểm (×{membership.tier.point_multiplier} hệ số)
               </p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "overview" && membership && (
+          <div className="membership-voucher-section">
+            <div className="voucher-exchange-header">
+              <h4>Quy đổi voucher</h4>
+              <small>1 điểm = 1.000đ</small>
+            </div>
+            <div className="voucher-option-grid">
+              {voucherOptions.map((option) => {
+                const canExchange = membership.points_available >= option.points;
+                return (
+                  <button
+                    className="voucher-option"
+                    key={option.discount}
+                    type="button"
+                    disabled={!canExchange || voucherLoading !== null}
+                    onClick={() => handleExchangeVoucher(option.discount)}
+                  >
+                    <strong>{formatCurrency(option.discount)}</strong>
+                    <small>{option.points} điểm</small>
+                  </button>
+                );
+              })}
+            </div>
+            {vouchers.length > 0 && (
+              <div className="voucher-list">
+                {visibleVouchers.map((voucher) => (
+                  <div className="voucher-code-row" key={voucher.id}>
+                    <div>
+                      <strong>{voucher.code}</strong>
+                      <small>
+                        Giảm {formatCurrency(voucher.discount_amount)} · {voucherStatusLabels[voucher.status]}
+                      </small>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyVoucher(voucher.code)}
+                      disabled={voucher.status !== "AVAILABLE"}
+                    >
+                      <Copy size={15} />
+                      Copy
+                    </button>
+                  </div>
+                ))}
+                {voucherTotalPages > 1 && (
+                  <div className="voucher-pagination">
+                    <button
+                      type="button"
+                      disabled={currentVoucherPage === 1}
+                      onClick={() => setVoucherPage((page) => Math.max(1, page - 1))}
+                    >
+                      Trước
+                    </button>
+                    <span>
+                      Trang {currentVoucherPage}/{voucherTotalPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={currentVoucherPage === voucherTotalPages}
+                      onClick={() => setVoucherPage((page) => Math.min(voucherTotalPages, page + 1))}
+                    >
+                      Sau
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            {voucherMessage && <p className="voucher-message">{voucherMessage}</p>}
+          </div>
+        )}
+
+        {exchangeRequest && (
+          <div
+            className="cinemax-dialog-backdrop"
+            role="presentation"
+            onMouseDown={() => {
+              if (voucherLoading === null) setExchangeRequest(null);
+            }}
+          >
+            <div
+              className="cinemax-dialog"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="voucher-exchange-title"
+              onMouseDown={(event) => event.stopPropagation()}
+            >
+              <button
+                className="cinemax-dialog-close"
+                type="button"
+                aria-label="Đóng"
+                onClick={() => setExchangeRequest(null)}
+                disabled={voucherLoading !== null}
+              >
+                <X size={18} />
+              </button>
+              <div className="cinemax-dialog-icon">
+                <Gift size={24} />
+              </div>
+              <h3 id="voucher-exchange-title">Đổi voucher VIP</h3>
+              <p>
+                Dùng <strong>{exchangeRequest.points} điểm</strong> để nhận voucher giảm{" "}
+                <strong>{formatCurrency(exchangeRequest.discount)}</strong>.
+              </p>
+              <div className="cinemax-dialog-actions">
+                <button
+                  className="cinemax-dialog-secondary"
+                  type="button"
+                  onClick={() => setExchangeRequest(null)}
+                  disabled={voucherLoading !== null}
+                >
+                  Hủy
+                </button>
+                <button
+                  className="cinemax-dialog-primary"
+                  type="button"
+                  onClick={confirmExchangeVoucher}
+                  disabled={voucherLoading !== null}
+                >
+                  {voucherLoading !== null ? "Đang đổi..." : "Xác nhận đổi"}
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -304,6 +549,20 @@ const MembershipPage = () => {
         {/* Tab: History */}
         {activeTab === "history" && (
           <div className="membership-history">
+            {benefitUsage.length > 0 && (
+              <div className="benefit-history-panel">
+                <h3>Lịch sử ưu đãi</h3>
+                {benefitUsage.map((item) => (
+                  <div className="benefit-history-row" key={item.id}>
+                    <span>{benefitLabels[item.benefit_key] || item.benefit_key}</span>
+                    <small>
+                      {formatDateTime(item.used_at)}
+                      {item.booking_code ? ` · ${item.booking_code}` : ""}
+                    </small>
+                  </div>
+                ))}
+              </div>
+            )}
             {history.length === 0 ? (
               <div className="section-state">Chưa có lịch sử thay đổi hạng.</div>
             ) : (

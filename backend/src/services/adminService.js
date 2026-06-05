@@ -1,7 +1,63 @@
 const pool = require("../configs/db");
 const membershipService = require("./membershipService");
 
+const autoCancelExpiredPendingBookings = async () => {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [expiredBookings] = await connection.execute(
+      `
+      SELECT b.id
+      FROM bookings b
+      JOIN showtimes s ON s.id = b.showtime_id
+      WHERE b.booking_status = 'PENDING'
+        AND s.start_time < NOW()
+      FOR UPDATE
+      `
+    );
+
+    for (const booking of expiredBookings) {
+      await connection.execute(
+        "UPDATE bookings SET booking_status = 'CANCELLED' WHERE id = ?",
+        [booking.id]
+      );
+
+      try {
+        await membershipService.awardCancellationRefundPoints(connection, booking.id);
+      } catch (error) {
+        if (error.statusCode !== 404 && error.message !== "Booking not found") {
+          throw error;
+        }
+
+        await connection.execute(
+          `
+          UPDATE payments
+          SET payment_status = 'FAILED'
+          WHERE booking_id = ?
+            AND payment_status IN ('PENDING', 'SUCCESS')
+          `,
+          [booking.id]
+        );
+        await membershipService.restoreBookingVouchers(connection, booking.id);
+        await membershipService.restoreBookingBenefits(connection, booking.id);
+      }
+    }
+
+    await connection.commit();
+    return expiredBookings.length;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
 const getDashboardStatistics = async () => {
+  await autoCancelExpiredPendingBookings();
+
   const [[movieStats]] = await pool.execute("SELECT COUNT(*) AS total_movies FROM movies");
   const [[bookingStats]] = await pool.execute("SELECT COUNT(*) AS total_bookings FROM bookings");
   const [[userStats]] = await pool.execute("SELECT COUNT(*) AS total_users FROM users");
@@ -145,6 +201,8 @@ const getDashboardStatistics = async () => {
 };
 
 const getAdminBookings = async (filters = {}) => {
+  await autoCancelExpiredPendingBookings();
+
   const {
     search,
     status,
@@ -234,6 +292,8 @@ const getAdminBookings = async (filters = {}) => {
 };
 
 const updateBookingStatus = async (bookingId, status) => {
+  await autoCancelExpiredPendingBookings();
+
   const allowedStatuses = ["PENDING", "CONFIRMED", "CANCELLED"];
   if (!allowedStatuses.includes(status)) {
     const AppError = require("../utils/AppError");
@@ -246,13 +306,32 @@ const updateBookingStatus = async (bookingId, status) => {
     await connection.beginTransaction();
 
     const [bookingRows] = await connection.execute(
-      "SELECT * FROM bookings WHERE id = ? LIMIT 1 FOR UPDATE",
+      `
+      SELECT b.*, s.start_time
+      FROM bookings b
+      JOIN showtimes s ON s.id = b.showtime_id
+      WHERE b.id = ?
+      LIMIT 1
+      FOR UPDATE
+      `,
       [bookingId]
     );
 
     if (!bookingRows[0]) {
       const AppError = require("../utils/AppError");
       throw new AppError("Booking not found", 404);
+    }
+
+    const previousStatus = bookingRows[0].booking_status;
+
+    if (previousStatus !== "PENDING" && status !== previousStatus) {
+      const AppError = require("../utils/AppError");
+      throw new AppError("Chỉ đơn PENDING mới có thể cập nhật trạng thái.", 400);
+    }
+
+    if (status === "CONFIRMED" && new Date(bookingRows[0].start_time).getTime() < Date.now()) {
+      const AppError = require("../utils/AppError");
+      throw new AppError("Booking đã quá giờ chiếu nên không thể duyệt.", 400);
     }
 
     await connection.execute("UPDATE bookings SET booking_status = ? WHERE id = ?", [
@@ -268,12 +347,86 @@ const updateBookingStatus = async (bookingId, status) => {
       await membershipService.awardBookingRewards(connection, bookingId);
     }
 
+    if (previousStatus !== "CANCELLED" && status === "CANCELLED") {
+      await membershipService.awardCancellationRefundPoints(connection, bookingId);
+    }
+
     const [rows] = await connection.execute("SELECT * FROM bookings WHERE id = ? LIMIT 1", [
       bookingId,
     ]);
 
     await connection.commit();
     return rows[0];
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+const approvePendingBookings = async (filters = {}) => {
+  await autoCancelExpiredPendingBookings();
+
+  const { search, status, date_from, date_to } = filters;
+
+  if (status && !["ALL", "PENDING"].includes(status)) {
+    return { approved: 0 };
+  }
+
+  let whereSql = `
+    WHERE b.booking_status = 'PENDING'
+      AND s.start_time >= NOW()
+  `;
+  const params = [];
+
+  if (search) {
+    whereSql += " AND (b.booking_code LIKE ? OR u.full_name LIKE ? OR u.email LIKE ?)";
+    const searchTerm = `%${search}%`;
+    params.push(searchTerm, searchTerm, searchTerm);
+  }
+
+  if (date_from) {
+    whereSql += " AND DATE(s.start_time) >= ?";
+    params.push(date_from);
+  }
+
+  if (date_to) {
+    whereSql += " AND DATE(s.start_time) <= ?";
+    params.push(date_to);
+  }
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [rows] = await connection.execute(
+      `
+      SELECT b.id
+      FROM bookings b
+      JOIN showtimes s ON s.id = b.showtime_id
+      LEFT JOIN users u ON u.id = b.user_id
+      ${whereSql}
+      ORDER BY b.id ASC
+      FOR UPDATE
+      `,
+      params
+    );
+
+    for (const booking of rows) {
+      await connection.execute("UPDATE bookings SET booking_status = 'CONFIRMED' WHERE id = ?", [
+        booking.id,
+      ]);
+      await connection.execute(
+        "UPDATE payments SET payment_status = 'SUCCESS' WHERE booking_id = ? AND payment_status = 'PENDING'",
+        [booking.id]
+      );
+      await membershipService.awardBookingRewards(connection, booking.id);
+    }
+
+    await connection.commit();
+    return { approved: rows.length };
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -512,6 +665,8 @@ const deleteAdminFoodSize = async (sizeId) => {
 };
 
 const exportBookings = async (filters = {}) => {
+  await autoCancelExpiredPendingBookings();
+
   const { status, date_from, date_to } = filters;
 
   let whereSql = "WHERE 1=1";
@@ -648,6 +803,7 @@ module.exports = {
   getDashboardStatistics,
   getAdminBookings,
   updateBookingStatus,
+  approvePendingBookings,
   getUsers,
   updateUserRole,
   updateUserStatus,

@@ -17,12 +17,13 @@ const createPayment = async ({ booking_id, payment_method, amount, transfer_cont
       throw new AppError("Booking not found", 404);
     }
 
-    const paymentAmount = amount || bookingRows[0].total_amount;
+    const paymentAmount = amount ?? bookingRows[0].total_amount;
 
     // BANK_TRANSFER: keep payment as PENDING, don't auto-confirm booking
     // Other methods: auto SUCCESS + confirm booking
     const isBankTransfer = payment_method === "BANK_TRANSFER";
-    const paymentStatus = isBankTransfer ? "PENDING" : "SUCCESS";
+    const requiresManualReview = isBankTransfer || Number(paymentAmount) === 0;
+    const paymentStatus = requiresManualReview ? "PENDING" : "SUCCESS";
 
     const [result] = await connection.execute(
       `
@@ -33,7 +34,7 @@ const createPayment = async ({ booking_id, payment_method, amount, transfer_cont
     );
 
     // Only auto-confirm booking for non-bank-transfer methods
-    if (!isBankTransfer) {
+    if (!requiresManualReview) {
       await connection.execute(
         "UPDATE bookings SET booking_status = 'CONFIRMED' WHERE id = ?",
         [booking_id]

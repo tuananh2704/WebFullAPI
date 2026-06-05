@@ -358,7 +358,7 @@ const MoviesPage = () => {
                     <Link to={`/movies/${movie.id}`} className="movie-adv-detail-btn" id={`btn-detail-${movie.id}`}>
                       Xem chi tiết
                     </Link>
-                    <Link to={`/movies/${movie.id}`} className="movie-adv-book-btn" id={`btn-book-${movie.id}`}>
+                    <Link to={`/movies/${movie.id}?booking=1`} className="movie-adv-book-btn" id={`btn-book-${movie.id}`}>
                       🎟 Đặt vé ngay
                     </Link>
                   </div>

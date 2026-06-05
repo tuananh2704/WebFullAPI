@@ -1,6 +1,52 @@
 const pool = require("../configs/db");
 const AppError = require("../utils/AppError");
 
+const VOUCHER_OPTIONS = {
+  50000: 50,
+  100000: 100,
+  200000: 200,
+};
+
+const LIMITED_BENEFIT_KEYS = new Set([
+  "FREE_POPCORN",
+  "FREE_COMBO",
+  "FREE_UPGRADE_SEAT",
+  "BIRTHDAY_GIFT",
+  "LOUNGE_ACCESS",
+]);
+
+const ensureVoucherTables = async (db = pool) => {
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS user_vouchers (
+      id BIGINT PRIMARY KEY AUTO_INCREMENT,
+      user_id BIGINT NOT NULL,
+      promotion_id BIGINT NOT NULL UNIQUE,
+      code VARCHAR(50) NOT NULL UNIQUE,
+      discount_amount INT NOT NULL,
+      points_cost INT NOT NULL,
+      status ENUM('AVAILABLE','RESERVED','USED') NOT NULL DEFAULT 'AVAILABLE',
+      booking_id BIGINT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      reserved_at TIMESTAMP NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE CASCADE,
+      FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE SET NULL
+    )
+  `);
+  await db.execute(
+    "ALTER TABLE user_vouchers MODIFY status ENUM('AVAILABLE','RESERVED','USED') NOT NULL DEFAULT 'AVAILABLE'"
+  );
+};
+
+const generateVoucherCode = () => {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let suffix = "";
+  for (let i = 0; i < 8; i += 1) {
+    suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `VIP${suffix}`;
+};
+
 /**
  * Lấy thông tin membership hiện tại của user
  * Bao gồm: tier info, tổng chi tiêu, điểm, benefits
@@ -68,6 +114,11 @@ const getMembership = async (userId) => {
     usageMap[row.benefit_key] = row.used_count;
   });
 
+  const visibleBenefits = benefits.map((b) => ({
+    ...b,
+    used_this_month: usageMap[b.benefit_key] || 0,
+  }));
+
   const nextTier = nextTierRows[0] || null;
   const spendToNextTier = nextTier
     ? Math.max(0, nextTier.min_spend - membership.total_spend)
@@ -103,10 +154,7 @@ const getMembership = async (userId) => {
             : 100,
         }
       : null,
-    benefits: benefits.map((b) => ({
-      ...b,
-      used_this_month: usageMap[b.benefit_key] || 0,
-    })),
+    benefits: visibleBenefits,
   };
 };
 
@@ -202,10 +250,10 @@ const calculateMembershipDiscount = async (userId, ticketTotal) => {
 /**
  * Sử dụng điểm thưởng — 1 điểm = 1,000 VNĐ
  */
-const usePoints = async (userId, pointsToUse) => {
+const usePoints = async (userId, pointsToUse, db = pool) => {
   if (pointsToUse <= 0) return 0;
 
-  const [rows] = await pool.execute(
+  const [rows] = await db.execute(
     `SELECT points, points_used FROM user_memberships WHERE user_id = ? LIMIT 1`,
     [userId]
   );
@@ -222,12 +270,28 @@ const usePoints = async (userId, pointsToUse) => {
   // 1 điểm = 1,000 VNĐ
   const discountFromPoints = pointsToUse * 1000;
 
-  await pool.execute(
+  await db.execute(
     `UPDATE user_memberships SET points_used = points_used + ? WHERE user_id = ?`,
     [pointsToUse, userId]
   );
 
   return discountFromPoints;
+};
+
+const refundUsedPoints = async (connection, userId, pointsToRefund) => {
+  const refund = Math.floor(Number(pointsToRefund || 0));
+  if (refund <= 0) return 0;
+
+  await connection.execute(
+    `
+    UPDATE user_memberships
+    SET points_used = GREATEST(points_used - ?, 0)
+    WHERE user_id = ?
+    `,
+    [refund, userId]
+  );
+
+  return refund;
 };
 
 /**
@@ -240,10 +304,305 @@ const recordBenefitUsage = async (userId, benefitKey, bookingId = null) => {
   );
 };
 
+const consumeFreePopcornBenefit = async (connection, userId, bookingId) => {
+  const [benefitRows] = await connection.execute(
+    `
+    SELECT mb.id
+    FROM user_memberships um
+    JOIN membership_benefits mb ON mb.tier_id = um.tier_id
+    WHERE um.user_id = ?
+      AND mb.benefit_key = 'FREE_POPCORN'
+    LIMIT 1
+    `,
+    [userId]
+  );
+
+  if (!benefitRows[0]) {
+    throw new AppError("Bạn chưa có ưu đãi bỏng ngô miễn phí", 400);
+  }
+
+  const [usageRows] = await connection.execute(
+    `
+    SELECT id
+    FROM membership_benefit_usage
+    WHERE user_id = ?
+      AND benefit_key = 'FREE_POPCORN'
+      AND MONTH(used_at) = MONTH(CURRENT_DATE())
+      AND YEAR(used_at) = YEAR(CURRENT_DATE())
+    LIMIT 1
+    `,
+    [userId]
+  );
+
+  if (usageRows[0]) {
+    throw new AppError("Ưu đãi bỏng ngô miễn phí đã được sử dụng trong tháng này", 400);
+  }
+
+  await connection.execute(
+    "INSERT INTO membership_benefit_usage (user_id, benefit_key, booking_id) VALUES (?, 'FREE_POPCORN', ?)",
+    [userId, bookingId]
+  );
+};
+
+const getUserVouchers = async (userId) => {
+  await ensureVoucherTables();
+  const [rows] = await pool.execute(
+    `
+    SELECT id, code, discount_amount, points_cost, status, created_at
+    FROM user_vouchers
+    WHERE user_id = ?
+    ORDER BY created_at DESC
+    LIMIT 20
+    `,
+    [userId]
+  );
+
+  return rows;
+};
+
+const exchangePointsForVoucher = async (userId, discountAmount) => {
+  const normalizedDiscount = Number(discountAmount);
+  const pointsCost = VOUCHER_OPTIONS[normalizedDiscount];
+  if (!pointsCost) {
+    throw new AppError("Invalid voucher value", 400);
+  }
+
+  await ensureVoucherTables();
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    await usePoints(userId, pointsCost, connection);
+
+    let code = generateVoucherCode();
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const [existing] = await connection.execute(
+        "SELECT id FROM promotions WHERE code = ? LIMIT 1",
+        [code]
+      );
+      if (!existing[0]) break;
+      code = generateVoucherCode();
+    }
+
+    const expireDate = new Date();
+    expireDate.setDate(expireDate.getDate() + 30);
+    const expireDateKey = expireDate.toISOString().slice(0, 10);
+
+    const [promotionResult] = await connection.execute(
+      `
+      INSERT INTO promotions(code, name, discount_type, discount_value, min_amount, expire_date, is_active)
+      VALUES (?, ?, 'FIXED', ?, 0, ?, TRUE)
+      `,
+      [code, `VIP voucher ${normalizedDiscount}`, normalizedDiscount, expireDateKey]
+    );
+
+    const [voucherResult] = await connection.execute(
+      `
+      INSERT INTO user_vouchers(user_id, promotion_id, code, discount_amount, points_cost)
+      VALUES (?, ?, ?, ?, ?)
+      `,
+      [userId, promotionResult.insertId, code, normalizedDiscount, pointsCost]
+    );
+
+    await connection.commit();
+    return {
+      id: voucherResult.insertId,
+      code,
+      discount_amount: normalizedDiscount,
+      points_cost: pointsCost,
+      status: "AVAILABLE",
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+const reserveUserVoucher = async (connection, userId, promotionId, bookingId) => {
+  const [rows] = await connection.execute(
+    `
+    SELECT id, user_id, status
+    FROM user_vouchers
+    WHERE promotion_id = ?
+    LIMIT 1
+    FOR UPDATE
+    `,
+    [promotionId]
+  );
+
+  if (!rows[0]) {
+    return { is_user_voucher: false, reserved: false };
+  }
+
+  if (Number(rows[0].user_id) !== Number(userId)) {
+    throw new AppError("Voucher does not belong to this user", 403);
+  }
+
+  if (rows[0].status !== "AVAILABLE") {
+    throw new AppError("Voucher has already been used", 400);
+  }
+
+  await connection.execute(
+    `
+    UPDATE user_vouchers
+    SET status = 'RESERVED', booking_id = ?, reserved_at = NOW()
+    WHERE id = ?
+    `,
+    [bookingId, rows[0].id]
+  );
+  await connection.execute("UPDATE promotions SET is_active = FALSE WHERE id = ?", [promotionId]);
+  return { is_user_voucher: true, reserved: true };
+};
+
+const finalizeBookingVouchers = async (connection, bookingId) => {
+  const [rows] = await connection.execute(
+    `
+    SELECT uv.id, uv.promotion_id
+    FROM user_vouchers uv
+    WHERE uv.booking_id = ?
+      AND uv.status = 'RESERVED'
+    FOR UPDATE
+    `,
+    [bookingId]
+  );
+
+  for (const voucher of rows) {
+    await connection.execute("UPDATE user_vouchers SET status = 'USED' WHERE id = ?", [voucher.id]);
+    await connection.execute("UPDATE promotions SET is_active = FALSE WHERE id = ?", [voucher.promotion_id]);
+  }
+};
+
+const restoreBookingVouchers = async (connection, bookingId) => {
+  const [rows] = await connection.execute(
+    `
+    SELECT id, promotion_id
+    FROM user_vouchers
+    WHERE booking_id = ?
+      AND status = 'RESERVED'
+    FOR UPDATE
+    `,
+    [bookingId]
+  );
+
+  for (const voucher of rows) {
+    await connection.execute(
+      `
+      UPDATE user_vouchers
+      SET status = 'AVAILABLE', booking_id = NULL, reserved_at = NULL
+      WHERE id = ?
+      `,
+      [voucher.id]
+    );
+    await connection.execute("UPDATE promotions SET is_active = TRUE WHERE id = ?", [
+      voucher.promotion_id,
+    ]);
+  }
+};
+
+const restoreBookingBenefits = async (connection, bookingId) => {
+  await connection.execute(
+    `
+    DELETE FROM membership_benefit_usage
+    WHERE booking_id = ?
+      AND benefit_key IN ('FREE_POPCORN', 'FREE_COMBO', 'FREE_UPGRADE_SEAT', 'BIRTHDAY_GIFT', 'LOUNGE_ACCESS')
+    `,
+    [bookingId]
+  );
+};
+
+const awardCancellationRefundPoints = async (connection, bookingId) => {
+  const [bookingRows] = await connection.execute(
+    `
+    SELECT b.id, b.user_id, b.total_amount, b.points_used
+    FROM bookings b
+    JOIN user_memberships um ON um.user_id = b.user_id
+    WHERE b.id = ?
+    LIMIT 1
+    FOR UPDATE
+    `,
+    [bookingId]
+  );
+
+  const booking = bookingRows[0];
+  if (!booking) {
+    throw new AppError("Booking not found", 404);
+  }
+
+  const bookingPointsUsed = Number(booking.points_used || 0);
+  if (bookingPointsUsed > 0) {
+    const refundedPoints = await refundUsedPoints(connection, booking.user_id, bookingPointsUsed);
+    await restoreBookingVouchers(connection, bookingId);
+    await restoreBookingBenefits(connection, bookingId);
+    await connection.execute(
+      "UPDATE payments SET payment_status = 'FAILED' WHERE booking_id = ? AND payment_status IN ('PENDING', 'SUCCESS')",
+      [bookingId]
+    );
+    return { points_refunded: refundedPoints, refund_amount: 0 };
+  }
+
+  const [paymentRows] = await connection.execute(
+    `
+    SELECT amount
+    FROM payments
+    WHERE booking_id = ?
+      AND payment_status IN ('PENDING', 'SUCCESS')
+    ORDER BY id DESC
+    LIMIT 1
+    FOR UPDATE
+    `,
+    [bookingId]
+  );
+
+  const refundAmount = Number(paymentRows[0]?.amount ?? booking.total_amount ?? 0);
+  const refundPoints = Math.floor(refundAmount / 1000);
+
+  if (refundPoints <= 0) {
+    await connection.execute(
+      `
+      UPDATE payments
+      SET payment_status = 'FAILED'
+      WHERE booking_id = ?
+        AND payment_status IN ('PENDING', 'SUCCESS')
+      `,
+      [bookingId]
+    );
+    await restoreBookingVouchers(connection, bookingId);
+    await restoreBookingBenefits(connection, bookingId);
+    return { points_refunded: 0, refund_amount: refundAmount };
+  }
+
+  await connection.execute(
+    `
+    UPDATE user_memberships
+    SET points = points + ?
+    WHERE user_id = ?
+    `,
+    [refundPoints, booking.user_id]
+  );
+
+  await connection.execute(
+    `
+    UPDATE payments
+    SET payment_status = 'FAILED'
+    WHERE booking_id = ?
+      AND payment_status IN ('PENDING', 'SUCCESS')
+    `,
+    [bookingId]
+  );
+
+  await restoreBookingVouchers(connection, bookingId);
+  await restoreBookingBenefits(connection, bookingId);
+
+  return { points_refunded: refundPoints, refund_amount: refundAmount };
+};
+
 const awardBookingRewards = async (connection, bookingId) => {
   const [bookingRows] = await connection.execute(
     `
-    SELECT b.id, b.user_id, b.total_amount, b.points_earned,
+    SELECT b.id, b.user_id, b.total_amount, b.points_earned, b.points_used,
            um.tier_id AS old_tier_id, um.total_spend
     FROM bookings b
     JOIN user_memberships um ON um.user_id = b.user_id
@@ -262,6 +621,15 @@ const awardBookingRewards = async (connection, bookingId) => {
   if (Number(booking.points_earned || 0) > 0) {
     return {
       points_earned: Number(booking.points_earned),
+      total_spend: Number(booking.total_spend || 0),
+      tier_id: booking.old_tier_id,
+    };
+  }
+
+  if (Number(booking.points_used || 0) > 0) {
+    await finalizeBookingVouchers(connection, bookingId);
+    return {
+      points_earned: 0,
       total_spend: Number(booking.total_spend || 0),
       tier_id: booking.old_tier_id,
     };
@@ -313,6 +681,8 @@ const awardBookingRewards = async (connection, bookingId) => {
     [pointsEarned, bookingId]
   );
 
+  await finalizeBookingVouchers(connection, bookingId);
+
   return { points_earned: pointsEarned, total_spend: totalSpend, tier_id: newTier.id };
 };
 
@@ -323,6 +693,15 @@ module.exports = {
   getBenefitUsage,
   calculateMembershipDiscount,
   usePoints,
+  refundUsedPoints,
   recordBenefitUsage,
+  consumeFreePopcornBenefit,
+  getUserVouchers,
+  exchangePointsForVoucher,
+  reserveUserVoucher,
+  finalizeBookingVouchers,
+  restoreBookingVouchers,
+  restoreBookingBenefits,
+  awardCancellationRefundPoints,
   awardBookingRewards,
 };

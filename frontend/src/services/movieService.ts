@@ -1,4 +1,10 @@
-import type { ApiMovie, ApiResponse, PaginatedMovies } from "../types/api";
+import type {
+  ApiCanRateMovie,
+  ApiMovie,
+  ApiMovieRatings,
+  ApiResponse,
+  PaginatedMovies,
+} from "../types/api";
 import apiClient from "./apiClient";
 
 export type MovieSearchParams = {
@@ -38,5 +44,26 @@ export const getMovieById = async (id: number): Promise<ApiMovie> => {
 
 export const getMovieTrailers = async (): Promise<TrailerSlide[]> => {
   const response = await apiClient.get<ApiResponse<TrailerSlide[]>>("/movies/trailers");
+  return response.data.data;
+};
+
+export const getMovieRatings = async (movieId: number): Promise<ApiMovieRatings> => {
+  const response = await apiClient.get<ApiResponse<ApiMovieRatings>>(`/movies/${movieId}/ratings`);
+  return response.data.data;
+};
+
+export const getCanRateMovie = async (movieId: number): Promise<ApiCanRateMovie> => {
+  const response = await apiClient.get<ApiResponse<ApiCanRateMovie>>(`/movies/${movieId}/can-rate`);
+  return response.data.data;
+};
+
+export const createMovieRating = async (
+  movieId: number,
+  payload: { bookingId: number; rating: number; comment: string }
+): Promise<ApiMovieRatings> => {
+  const response = await apiClient.post<ApiResponse<ApiMovieRatings>>(
+    `/movies/${movieId}/ratings`,
+    payload
+  );
   return response.data.data;
 };

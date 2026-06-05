@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Edit3, Plus, Trash2 } from "lucide-react";
-import type { ApiShowtime, ApiMovie } from "../../../types/api";
+import type { ApiShowtime, ApiMovie, ApiCinema, ApiRoom } from "../../../types/api";
 
 type ShowtimeForm = {
   id: string;
   movie_id: string;
+  cinema_id: string;
   room_id: string;
   start_time: string;
   end_time: string;
@@ -14,6 +15,7 @@ type ShowtimeForm = {
 type ShowtimesSectionProps = {
   showtimes: ApiShowtime[];
   movies: ApiMovie[];
+  cinemas: ApiCinema[];
   showtimeForm: ShowtimeForm;
   setShowtimeForm: (form: ShowtimeForm) => void;
   handleSubmitShowtime: (event: React.FormEvent<HTMLFormElement>) => void;
@@ -36,9 +38,17 @@ const actionButtonStyle: React.CSSProperties = {
   justifySelf: "center",
 };
 
+const toDateTimeLocal = (date: Date) => {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+};
+
 const ShowtimesSection: React.FC<ShowtimesSectionProps> = ({
   showtimes,
   movies,
+  cinemas,
   showtimeForm,
   setShowtimeForm,
   handleSubmitShowtime,
@@ -49,8 +59,21 @@ const ShowtimesSection: React.FC<ShowtimesSectionProps> = ({
   const [searchTerm, setSearchTerm] = useState("");
   const [cinemaFilter, setCinemaFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState<"ALL" | ApiShowtime["status"]>("ALL");
+  const [sortOrder, setSortOrder] = useState<"NEWEST" | "OLDEST">("NEWEST");
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
+  const selectedMovie = useMemo(
+    () => movies.find((movie) => String(movie.id) === showtimeForm.movie_id) || null,
+    [movies, showtimeForm.movie_id]
+  );
+  const selectedCinema = useMemo(
+    () => cinemas.find((cinema) => String(cinema.id) === showtimeForm.cinema_id) || null,
+    [cinemas, showtimeForm.cinema_id]
+  );
+  const roomOptions = useMemo<ApiRoom[]>(
+    () => selectedCinema?.rooms?.filter((room) => room.status === "ACTIVE") || [],
+    [selectedCinema]
+  );
 
   const cinemaOptions = useMemo(
     () =>
@@ -61,8 +84,8 @@ const ShowtimesSection: React.FC<ShowtimesSectionProps> = ({
   );
 
   const filteredShowtimes = useMemo(
-    () =>
-      showtimes.filter((showtime) => {
+    () => {
+      const items = showtimes.filter((showtime) => {
         const title = showtime.movie_title?.toLowerCase() || "";
         const matchesSearch = title.includes(searchTerm.toLowerCase());
         const matchesCinema =
@@ -71,15 +94,20 @@ const ShowtimesSection: React.FC<ShowtimesSectionProps> = ({
         const matchesStatus =
           statusFilter === "ALL" || showtime.status === statusFilter;
         return matchesSearch && matchesCinema && matchesStatus;
-      }),
-    [showtimes, searchTerm, cinemaFilter, statusFilter]
+      });
+
+      return items.sort((first, second) =>
+        sortOrder === "NEWEST" ? second.id - first.id : first.id - second.id
+      );
+    },
+    [showtimes, searchTerm, cinemaFilter, statusFilter, sortOrder]
   );
 
   const totalPages = Math.max(1, Math.ceil(filteredShowtimes.length / pageSize));
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, cinemaFilter, statusFilter]);
+  }, [searchTerm, cinemaFilter, statusFilter, sortOrder]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -109,6 +137,7 @@ const ShowtimesSection: React.FC<ShowtimesSectionProps> = ({
       <form className="form-panel admin-form" onSubmit={handleSubmitShowtime}>
         <h2>{showtimeForm.id ? "Sửa suất chiếu" : "Thêm suất chiếu"}</h2>
 
+        <label className="form-field-label">Phim</label>
         <select
           required
           value={showtimeForm.movie_id}
@@ -117,42 +146,83 @@ const ShowtimesSection: React.FC<ShowtimesSectionProps> = ({
           }
         >
           <option value="">Chọn phim</option>
-          {movies.map((movie) => (
+          {movies
+            .filter((movie) => movie.status !== "ENDED")
+            .map((movie) => (
             <option value={movie.id} key={movie.id}>
-              {movie.title}
+              {movie.title} - {movie.duration || 0} phút - {movie.status}
             </option>
           ))}
         </select>
 
-        <input
+        {selectedMovie && (
+          <p className="muted" style={{ fontSize: 13, marginTop: -4 }}>
+            Phim phát hành từ {selectedMovie.release_date?.slice(0, 10) || "chưa có ngày"} · thời lượng{" "}
+            {selectedMovie.duration || 0} phút · phân loại {selectedMovie.age_rating || "T13"}
+          </p>
+        )}
+
+        <label className="form-field-label">Rạp</label>
+        <select
           required
-          type="number"
-          min="1"
-          placeholder="Room ID"
+          value={showtimeForm.cinema_id}
+          onChange={(e) =>
+            setShowtimeForm({ ...showtimeForm, cinema_id: e.target.value, room_id: "" })
+          }
+        >
+          <option value="">Chọn rạp</option>
+          {cinemas.map((cinema) => (
+            <option value={cinema.id} key={cinema.id}>
+              {cinema.name} - {cinema.city}
+            </option>
+          ))}
+        </select>
+
+        <label className="form-field-label">Phòng chiếu</label>
+        <select
+          required
           value={showtimeForm.room_id}
-          onChange={(e) =>
-            setShowtimeForm({ ...showtimeForm, room_id: e.target.value })
-          }
-        />
+          disabled={!showtimeForm.cinema_id}
+          onChange={(e) => setShowtimeForm({ ...showtimeForm, room_id: e.target.value })}
+        >
+          <option value="">Chọn phòng</option>
+          {roomOptions.map((room) => (
+            <option value={room.id} key={room.id}>
+              {room.name} - {room.room_type} ({room.total_seats} ghế)
+            </option>
+          ))}
+        </select>
 
+        <label className="form-field-label">Bắt đầu</label>
         <input
           required
           type="datetime-local"
+          min={selectedMovie?.release_date ? `${selectedMovie.release_date.slice(0, 10)}T00:00` : undefined}
           value={showtimeForm.start_time}
-          onChange={(e) =>
-            setShowtimeForm({ ...showtimeForm, start_time: e.target.value })
-          }
+          onChange={(e) => {
+            const startTime = e.target.value;
+            let endTime = showtimeForm.end_time;
+            if (startTime && selectedMovie?.duration) {
+              endTime = toDateTimeLocal(
+                new Date(new Date(startTime).getTime() + Number(selectedMovie.duration) * 60 * 1000)
+              );
+            }
+            setShowtimeForm({ ...showtimeForm, start_time: startTime, end_time: endTime });
+          }}
         />
 
+        <label className="form-field-label">Kết thúc</label>
         <input
           required
           type="datetime-local"
+          min={showtimeForm.start_time || undefined}
           value={showtimeForm.end_time}
           onChange={(e) =>
             setShowtimeForm({ ...showtimeForm, end_time: e.target.value })
           }
         />
 
+        <label className="form-field-label">Trạng thái</label>
         <select
           value={showtimeForm.status}
           onChange={(e) =>
@@ -219,6 +289,14 @@ const ShowtimesSection: React.FC<ShowtimesSectionProps> = ({
             <option value="FULL">Đã đầy</option>
             <option value="CANCELLED">Đã hủy</option>
           </select>
+
+          <select
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as "NEWEST" | "OLDEST")}
+          >
+            <option value="NEWEST">Mới thêm lên đầu</option>
+            <option value="OLDEST">Mới thêm xuống cuối</option>
+          </select>
         </div>
 
         <div
@@ -249,10 +327,13 @@ const ShowtimesSection: React.FC<ShowtimesSectionProps> = ({
 
                 <span style={cellStyle}>
                   {showtime.cinema_name} - {showtime.room_name}
+                  {showtime.room_total_seats
+                    ? ` (${showtime.room_total_seats} ghế)`
+                    : ""}
                 </span>
 
                 <span style={cellStyle}>
-                  {formatDateTime(showtime.start_time)}
+                  {formatDateTime(showtime.start_time)} - {formatDateTime(showtime.end_time)}
                 </span>
 
                 <span style={cellStyle}>{showtime.status}</span>

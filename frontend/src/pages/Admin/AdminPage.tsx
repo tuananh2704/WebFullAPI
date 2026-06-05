@@ -40,12 +40,14 @@ import {
   createAdminFoodSize,
   updateAdminFoodSize,
   deleteAdminFoodSize,
+  approveAllPendingBookings,
 } from "../../services/adminService";
 import type { AdminBooking, AdminUser } from "../../services/adminService";
 import { getMovies } from "../../services/movieService";
 import { getShowtimes } from "../../services/showtimeService";
-import type { ApiMovie, ApiShowtime, ApiFood, ApiFoodSize } from "../../types/api";
-import { formatDateTime } from "../../utils/format";
+import { getCinemas } from "../../services/cinemaService";
+import type { ApiMovie, ApiShowtime, ApiFood, ApiFoodSize, ApiCinema } from "../../types/api";
+import { formatDateTime, parseLocalDateTime } from "../../utils/format";
 
 type AdminTab = "overview" | "movies" | "showtimes" | "bookings" | "users" | "foods";
 
@@ -67,11 +69,13 @@ const emptyMovieForm = {
   id: "",
   title: "",
   description: "",
+  director: "",
   duration: "",
   release_date: "",
   poster_url: "",
   trailer_url: "",
   language: "Vietnamese",
+  age_rating: "T13",
   rating: "8.0",
   status: "NOW_SHOWING",
 };
@@ -79,6 +83,7 @@ const emptyMovieForm = {
 const emptyShowtimeForm = {
   id: "",
   movie_id: "",
+  cinema_id: "",
   room_id: "",
   start_time: "",
   end_time: "",
@@ -97,6 +102,23 @@ const emptySizeForm: SizeForm = {
   id: "",
   size_name: "",
   price: "",
+};
+
+const toDateTimeInputValue = (value?: string | null) => {
+  const raw = String(value || "");
+  if (!raw) return "";
+
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(raw) && !/[zZ]|[+-]\d{2}:?\d{2}$/.test(raw)) {
+    return raw.replace(" ", "T").slice(0, 16);
+  }
+
+  const date = parseLocalDateTime(raw);
+  if (Number.isNaN(date.getTime())) return "";
+
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
 };
 
 const AdminPage = () => {
@@ -127,6 +149,7 @@ const AdminPage = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [movieForm, setMovieForm] = useState(emptyMovieForm);
   const [showtimeForm, setShowtimeForm] = useState(emptyShowtimeForm);
+  const [cinemas, setCinemas] = useState<ApiCinema[]>([]);
   const [foods, setFoods] = useState<ApiFood[]>([]);
   const [foodForm, setFoodForm] = useState<FoodForm>(emptyFoodForm);
   const [selectedFood, setSelectedFood] = useState<ApiFood | null>(null);
@@ -164,13 +187,14 @@ const AdminPage = () => {
   const loadAdminData = async () => {
     setIsLoading(true);
     try {
-      const [statsData, movieData, showtimeData, userData, foodsData] =
+      const [statsData, movieData, showtimeData, userData, foodsData, cinemaData] =
         await Promise.all([
           getDashboardStats(),
           getMovies({ page: 1, limit: 50 }),
           getShowtimes(),
           getAdminUsers(),
           getAdminFoods(),
+          getCinemas(),
         ]);
 
       setStats(statsData);
@@ -178,6 +202,7 @@ const AdminPage = () => {
       setShowtimes(showtimeData);
       setUsers(userData);
       setFoods(foodsData);
+      setCinemas(cinemaData);
 
       await loadBookings();
       setMessage("");
@@ -233,22 +258,24 @@ const AdminPage = () => {
       };
 
       if (foodForm.id) {
-        await updateAdminFood(Number(foodForm.id), payload);
+        const updatedFood = await updateAdminFood(Number(foodForm.id), payload);
         notification.success({
           message: "Cập nhật đồ ăn",
           description: "Đã cập nhật đồ ăn thành công.",
         });
+        setSelectedFood(updatedFood);
+        await loadFoodSizes(updatedFood.id);
       } else {
-        await createAdminFood(payload);
+        const createdFood = await createAdminFood(payload);
         notification.success({
           message: "Thêm đồ ăn",
-          description: "Đã thêm đồ ăn mới thành công.",
+          description: "Đã thêm đồ ăn mới. Hãy thêm size và giá để món hiện ở trang đặt vé.",
         });
+        setSelectedFood(createdFood);
+        setFoodSizes([]);
       }
 
       setFoodForm(emptyFoodForm);
-      setSelectedFood(null);
-      setFoodSizes([]);
       await loadAdminData();
     } catch (error: any) {
       notification.error({
@@ -417,13 +444,19 @@ const AdminPage = () => {
       const payload = {
         title: movieForm.title,
         description: movieForm.description,
+        director: movieForm.director,
         duration: Number(movieForm.duration),
         release_date: movieForm.release_date,
         poster_url: movieForm.poster_url,
         trailer_url: movieForm.trailer_url,
         language: movieForm.language,
+        age_rating: movieForm.age_rating,
         rating: Number(movieForm.rating),
-        status: movieForm.status as ApiMovie["status"],
+        status: (movieForm.id
+          ? movieForm.status
+          : movieForm.status === "ENDED"
+          ? "NOW_SHOWING"
+          : movieForm.status) as ApiMovie["status"],
       };
 
       if (movieForm.id) {
@@ -507,16 +540,42 @@ const AdminPage = () => {
     }
   };
 
+  const handleApproveAllBookings = async () => {
+    try {
+      const result = await approveAllPendingBookings({
+        search: bookingFilters.search || undefined,
+        status: bookingFilters.status,
+        date_from: bookingFilters.date_from || undefined,
+        date_to: bookingFilters.date_to || undefined,
+      });
+      notification.success({
+        message: "Duyệt tất cả đơn hàng",
+        description:
+          result.approved > 0
+            ? `Đã duyệt ${result.approved} đơn hàng.`
+            : "Không có đơn PENDING hợp lệ để duyệt.",
+      });
+      await loadBookings();
+    } catch (error: any) {
+      notification.error({
+        message: "Lỗi duyệt tất cả",
+        description: error.response?.data?.message || "Không thể duyệt tất cả đơn hàng.",
+      });
+    }
+  };
+
   const editMovie = (movie: ApiMovie) => {
     setMovieForm({
       id: String(movie.id),
       title: movie.title,
       description: movie.description || "",
+      director: movie.director || "",
       duration: String(movie.duration || ""),
       release_date: movie.release_date?.slice(0, 10) || "",
       poster_url: movie.poster_url || "",
       trailer_url: movie.trailer_url || "",
       language: movie.language || "Vietnamese",
+      age_rating: movie.age_rating || "T13",
       rating: String(movie.rating || "8.0"),
       status: movie.status,
     });
@@ -527,9 +586,10 @@ const AdminPage = () => {
     setShowtimeForm({
       id: String(showtime.id),
       movie_id: String(showtime.movie_id),
+      cinema_id: String(showtime.cinema_id || ""),
       room_id: String(showtime.room_id),
-      start_time: showtime.start_time.slice(0, 16),
-      end_time: showtime.end_time.slice(0, 16),
+      start_time: toDateTimeInputValue(showtime.start_time),
+      end_time: toDateTimeInputValue(showtime.end_time),
       status: showtime.status,
     });
     setActiveTab("showtimes");
@@ -715,6 +775,7 @@ const AdminPage = () => {
           <ShowtimesSection
             showtimes={showtimes}
             movies={movies}
+            cinemas={cinemas}
             showtimeForm={showtimeForm}
             setShowtimeForm={setShowtimeForm}
             handleSubmitShowtime={handleSubmitShowtime}
@@ -739,6 +800,7 @@ const AdminPage = () => {
     await loadBookings(nextFilters);
   }}
   handleBookingStatus={handleBookingStatus}
+  handleApproveAllBookings={handleApproveAllBookings}
 />
         )}
 

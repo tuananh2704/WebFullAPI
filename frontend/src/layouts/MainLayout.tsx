@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import {
   BarChart3,
   Clapperboard,
+  Crown,
   Film,
   LogOut,
   Mail,
@@ -14,18 +15,23 @@ import {
 } from "lucide-react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getCurrentUser, hasAdminAccess, logout } from "../services/authService";
-import type { ApiUser } from "../types/api";
+import { getMyMembership } from "../services/membershipService";
+import type { ApiMembershipInfo, ApiUser } from "../types/api";
 
 const getLastName = (fullName: string) => {
   const parts = fullName.trim().split(/\s+/);
   return parts[parts.length - 1] || fullName;
 };
 
+const formatPoints = (points: number) => new Intl.NumberFormat("vi-VN").format(points);
+
 const MainLayout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [user, setUser] = useState<ApiUser | null>(getCurrentUser());
+  const [membership, setMembership] = useState<ApiMembershipInfo | null>(null);
   const isAdminUser = hasAdminAccess(user);
+  const userId = user?.id;
 
   useEffect(() => {
     const sync = () => setUser(getCurrentUser());
@@ -42,6 +48,39 @@ const MainLayout = () => {
       navigate("/admin", { replace: true });
     }
   }, [isAdminUser, location.pathname, navigate]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!userId || isAdminUser) {
+      setMembership(null);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const fetchMembership = () => {
+      getMyMembership()
+        .then((data) => {
+          if (isMounted) {
+            setMembership(data);
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setMembership(null);
+          }
+        });
+    };
+
+    fetchMembership();
+    const interval = window.setInterval(fetchMembership, 5000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(interval);
+    };
+  }, [userId, isAdminUser]);
 
   const handleLogout = () => {
     logout();
@@ -88,6 +127,20 @@ const MainLayout = () => {
                   <UserRound size={18} />
                   <span className="user-display-name">{getLastName(user.full_name)}</span>
                 </NavLink>
+                {!isAdminUser && membership && (
+                  <NavLink
+                    className="user-membership-summary"
+                    to="/membership"
+                    title={`${membership.tier.name} - ${formatPoints(membership.points_available)} điểm`}
+                    style={{ "--tier-color": membership.tier.color_hex } as CSSProperties}
+                  >
+                    <Crown size={16} />
+                    <span className="user-membership-text">
+                      <strong>{membership.tier.name}</strong>
+                      <small>{formatPoints(membership.points_available)} điểm</small>
+                    </span>
+                  </NavLink>
+                )}
                 <button
                   className="logout-btn"
                   onClick={handleLogout}
@@ -169,9 +222,9 @@ const MainLayout = () => {
 
             <div className="footer-column">
               <h2>Chính sách</h2>
-              <a href="/membership">Thành viên VIP</a>
-              <a href="/bookings">Lịch sử giao dịch</a>
-              <a href="/auth">Tài khoản và bảo mật</a>
+              <NavLink to="/membership">Thành viên VIP</NavLink>
+              <NavLink to="/bookings">Lịch sử giao dịch</NavLink>
+              <NavLink to={user ? "/profile" : "/auth"}>Tài khoản và bảo mật</NavLink>
             </div>
           </div>
           <div className="container footer-bottom">

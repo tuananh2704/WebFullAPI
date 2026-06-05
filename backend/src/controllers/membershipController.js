@@ -22,9 +22,24 @@ const getBenefitUsage = asyncHandler(async (req, res) => {
   return successResponse(res, "Get benefit usage successfully", usage);
 });
 
+const getUserVouchers = asyncHandler(async (req, res) => {
+  const vouchers = await membershipService.getUserVouchers(req.user.id);
+  return successResponse(res, "Get user vouchers successfully", vouchers);
+});
+
+const exchangePointsForVoucher = asyncHandler(async (req, res) => {
+  const voucher = await membershipService.exchangePointsForVoucher(
+    req.user.id,
+    req.body.discount_amount
+  );
+  return successResponse(res, "Exchange points for voucher successfully", voucher, 201);
+});
+
 module.exports = {
   getMembership,
   getAllTiers,
   getTierHistory,
   getBenefitUsage,
+  getUserVouchers,
+  exchangePointsForVoucher,
 };

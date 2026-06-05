@@ -12,6 +12,7 @@ router.use(roleMiddleware("ADMIN", "EMPLOYEE"));
 
 router.get("/dashboard", adminController.getDashboardStatistics);
 router.get("/bookings", adminController.getAdminBookings);
+router.post("/bookings/approve-all", adminController.approvePendingBookings);
 router.patch("/bookings/:id/status", adminController.updateBookingStatus);
 
 router.get("/export/bookings", adminController.exportBookings);
@@ -21,7 +22,6 @@ router.get("/users", adminController.getUsers);
 router.get("/users/:id", adminController.getUserDetail);
 router.patch("/users/:id/role", adminController.updateUserRole);
 router.patch("/users/:id/status", adminController.updateUserStatus);
-router.delete("/users/:id", adminController.deleteUser);
 
 router.get("/movies", movieController.getMovies);
 router.get("/movies/:id", movieController.getMovieDetail);

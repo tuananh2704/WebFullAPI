@@ -52,6 +52,19 @@ export const updateAdminBookingStatus = async (
   return response.data.data;
 };
 
+export const approveAllPendingBookings = async (payload?: {
+  search?: string;
+  status?: string;
+  date_from?: string;
+  date_to?: string;
+}) => {
+  const response = await apiClient.post<ApiResponse<{ approved: number }>>(
+    "/admin/bookings/approve-all",
+    payload || {}
+  );
+  return response.data.data;
+};
+
 export const createAdminMovie = async (payload: Partial<ApiMovie>) => {
   const response = await apiClient.post<ApiResponse<ApiMovie>>("/admin/movies", payload);
   return response.data.data;

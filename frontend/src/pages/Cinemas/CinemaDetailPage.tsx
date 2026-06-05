@@ -1,9 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Select, Tag, Spin, Empty } from "antd";
-import { getCinemaById, getShowtimesByMovieAndCinema } from "../../services/cinemaService";
+import {
+  getCinemaById,
+  getShowtimesByCinema,
+  getShowtimesByMovieAndCinema,
+} from "../../services/cinemaService";
 import { getMovies } from "../../services/movieService";
 import type { ApiCinema, ApiMovie, ApiRoom, ApiShowtime, ShowtimeByDate } from "../../types/api";
+import { formatTime } from "../../utils/format";
 
 const BRAND_COLOR: Record<string, string> = {
   CGV: "#E50914",
@@ -20,14 +25,19 @@ const ROOM_TYPE_COLOR: Record<string, string> = {
   "4DX": "#BF360C",
 };
 
-// Generate the next 14 days as YYYY-MM-DD strings
+const toDateKey = (date: Date) => {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+// Generate the next 14 days as local YYYY-MM-DD strings
 const generateNext14Days = (): string[] => {
   const days: string[] = [];
   const now = new Date();
   for (let i = 0; i < 14; i++) {
     const d = new Date(now);
     d.setDate(now.getDate() + i);
-    days.push(d.toISOString().slice(0, 10));
+    days.push(toDateKey(d));
   }
   return days;
 };
@@ -37,7 +47,7 @@ const formatTabLabel = (dateStr: string): React.ReactNode => {
   const dayNames = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
   const dd = String(d.getDate()).padStart(2, "0");
   const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const isToday = dateStr === new Date().toISOString().slice(0, 10);
+  const isToday = dateStr === toDateKey(new Date());
   return (
     <span className="date-tab-label">
       <span className="date-tab-day">{isToday ? "Hôm nay" : dayNames[d.getDay()]}</span>
@@ -64,12 +74,20 @@ const CinemaDetailPage = () => {
   useEffect(() => {
     const load = async () => {
       try {
-        const [cinemaData, moviesData] = await Promise.all([
+        const [cinemaData, moviesData, cinemaShowtimes] = await Promise.all([
           getCinemaById(cinemaId),
           getMovies({ limit: 100 }),
+          getShowtimesByCinema(cinemaId),
         ]);
+        const movieIdsWithShowtimes = new Set(
+          cinemaShowtimes.flatMap((group) => group.showtimes.map((showtime) => showtime.movie_id))
+        );
+        const availableMovies = moviesData.items.filter((movie) =>
+          movieIdsWithShowtimes.has(movie.id)
+        );
         setCinema(cinemaData);
-        setMovies(moviesData.items);
+        setMovies(availableMovies);
+        setSelectedMovieId((current) => current || availableMovies[0]?.id || null);
       } catch {
         // noop
       } finally {
@@ -210,6 +228,7 @@ const CinemaDetailPage = () => {
               options={movies.map((m) => ({ value: m.id, label: m.title }))}
               onChange={(val: number) => setSelectedMovieId(val)}
               value={selectedMovieId}
+              notFoundContent="Rạp này chưa có phim có suất chiếu"
             />
 
             {!selectedMovieId && (
@@ -265,10 +284,7 @@ const CinemaDetailPage = () => {
                         onClick={() => handleShowtimeClick(st)}
                       >
                         <span className="showtime-btn-time">
-                          {new Date(st.start_time).toLocaleTimeString("vi-VN", {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          {formatTime(st.start_time)}
                         </span>
                         <span className="showtime-btn-room">{st.room_name}</span>
                         <Tag

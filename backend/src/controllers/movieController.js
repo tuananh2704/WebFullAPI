@@ -43,6 +43,28 @@ const getMovieTrailers = asyncHandler(async (_req, res) => {
   return successResponse(res, "Get movie trailers successfully", trailers);
 });
 
+const getMovieRatings = asyncHandler(async (req, res) => {
+  const data = await movieService.getMovieRatings(req.params.movieId);
+  return successResponse(res, "Get movie ratings successfully", data);
+});
+
+const getCanRateMovie = asyncHandler(async (req, res) => {
+  const data = await movieService.getCanRateMovie(req.params.movieId, req.user.id);
+  return successResponse(res, "Check movie rating permission successfully", data);
+});
+
+const createMovieRating = asyncHandler(async (req, res) => {
+  requireFields(req.body, ["bookingId", "rating"]);
+  const data = await movieService.createMovieRating({
+    movieId: req.params.movieId,
+    userId: req.user.id,
+    bookingId: req.body.bookingId,
+    rating: req.body.rating,
+    comment: req.body.comment || "",
+  });
+  return successResponse(res, "Create movie rating successfully", data, 201);
+});
+
 module.exports = {
   getMovies,
   getMovieDetail,
@@ -50,4 +72,7 @@ module.exports = {
   updateMovie,
   deleteMovie,
   getMovieTrailers,
+  getMovieRatings,
+  getCanRateMovie,
+  createMovieRating,
 };

@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { notification } from "antd";
 import { useNavigate } from "react-router-dom";
 import {
+  getCurrentUser,
   hasAdminAccess,
   login,
   register,
@@ -50,6 +51,13 @@ const AuthPage = () => {
   const [forgotStep, setForgotStep] = useState<"email" | "code" | "password">("email");
   const [forgotPassword, setForgotPassword] = useState("");
   const [forgotOtp, setForgotOtp] = useState("");
+
+  useEffect(() => {
+    const currentUser = getCurrentUser();
+    if (currentUser) {
+      navigate(hasAdminAccess(currentUser) ? "/admin" : "/profile", { replace: true });
+    }
+  }, [navigate]);
 
   useEffect(() => {
     if ((!otpStep && mode !== "forgot") || countdown <= 0) return;
