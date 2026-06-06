@@ -5,6 +5,7 @@ const getMailConfig = () => {
   const port = Number(process.env.SMTP_PORT || 587);
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
+  
 
   if (!host || !user || !pass) {
     throw new Error("SMTP email config is missing");
@@ -14,6 +15,7 @@ const getMailConfig = () => {
     host,
     port,
     secure: process.env.SMTP_SECURE === "true",
+    family: 4,
     auth: {
       user,
       pass,
