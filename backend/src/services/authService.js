@@ -142,11 +142,17 @@ const register = async ({ full_name, email, phone, birth_date, password }) => {
 
   try {
     await sendVerificationEmail({ to: email, fullName: full_name, verificationCode });
-  } catch (error) {
+    } catch (error) {
     await pool.execute("DELETE FROM pending_users WHERE email = ?", [email]);
-    if (process.env.NODE_ENV !== "production") {
-      console.error("Failed to send verification email", error);
-    }
+
+    console.error("SMTP REGISTER ERROR:", {
+      message: error.message,
+      code: error.code,
+      command: error.command,
+      response: error.response,
+      responseCode: error.responseCode,
+    });
+
     throw new AppError("Không gửi được email OTP. Vui lòng kiểm tra cấu hình SMTP.", 500);
   }
 
