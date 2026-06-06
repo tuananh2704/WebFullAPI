@@ -1,3 +1,6 @@
+const dns = require("dns");
+dns.setDefaultResultOrder("ipv4first");
+
 const nodemailer = require("nodemailer");
 
 const getMailConfig = () => {
@@ -5,25 +8,44 @@ const getMailConfig = () => {
   const port = Number(process.env.SMTP_PORT || 587);
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
-  
 
   if (!host || !user || !pass) {
     throw new Error("SMTP email config is missing");
   }
 
+  console.log("SMTP CONFIG:", {
+    host,
+    port,
+    secure: process.env.SMTP_SECURE === "true",
+  });
+
   return {
     host,
     port,
     secure: process.env.SMTP_SECURE === "true",
-    family: 4,
     auth: {
       user,
       pass,
     },
+    tls: {
+      family: 4,
+    },
   };
 };
 
-const createTransporter = () => nodemailer.createTransport(getMailConfig());
+const createTransporter = () => {
+  const transporter = nodemailer.createTransport(getMailConfig());
+
+  transporter.verify((error, success) => {
+    if (error) {
+      console.error("SMTP VERIFY ERROR:", error);
+    } else {
+      console.log("SMTP SERVER READY");
+    }
+  });
+
+  return transporter;
+};
 
 const escapeHtml = (value) =>
   String(value || "")
