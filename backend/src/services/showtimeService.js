@@ -82,6 +82,8 @@ const normalizeDateTime = (value) => {
 const getDatePart = (dateTime) => normalizeDateTime(dateTime).slice(0, 10);
 
 const TURNAROUND_MINUTES = 45;
+const MIN_HOURS_BEFORE_SHOWTIME = 3;
+const SHOWTIME_MIN_MESSAGE = "Suất chiếu phải bắt đầu sau thời điểm hiện tại ít nhất 3 tiếng.";
 
 const SEAT_PRICE_BY_ROOM_TYPE = {
   "2D": { NORMAL: 75000, VIP: 110000, COUPLE: 190000 },
@@ -122,6 +124,14 @@ const validateShowtimePayload = async (
 
   if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
     throw new AppError("Thời gian suất chiếu không hợp lệ", 400);
+  }
+
+  if (!showtimeId) {
+    const minStartDate = new Date();
+    minStartDate.setHours(minStartDate.getHours() + MIN_HOURS_BEFORE_SHOWTIME);
+    if (startDate.getTime() < minStartDate.getTime()) {
+      throw new AppError(SHOWTIME_MIN_MESSAGE, 400);
+    }
   }
 
   if (endDate <= startDate) {

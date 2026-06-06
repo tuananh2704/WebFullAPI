@@ -13,22 +13,8 @@ import {
 } from "../../services/authService";
 
 const DEMO_ACCOUNTS = [
-  { email: "a@gmail.com", name: "Nguyen Van A" },
-  { email: "b@gmail.com", name: "Tran Thi B" },
-  { email: "c@gmail.com", name: "Le Van C" },
-  { email: "d@gmail.com", name: "Pham Thi D" },
-  { email: "e@gmail.com", name: "Hoang Van E" },
-  { email: "lan@gmail.com", name: "Nguyen Thi Lan" },
-  { email: "minh@gmail.com", name: "Tran Van Minh" },
-  { email: "hoa@gmail.com", name: "Le Thi Hoa" },
-  { email: "duc@gmail.com", name: "Pham Van Duc" },
-  { email: "mai@gmail.com", name: "Hoang Thi Mai" },
-  { email: "tuan@gmail.com", name: "Vo Van Tuan" },
-  { email: "thu@gmail.com", name: "Dang Thi Thu" },
-  { email: "hung@gmail.com", name: "Bui Van Hung" },
-  { email: "linh@gmail.com", name: "Do Thi Linh" },
-  { email: "khanh@gmail.com", name: "Nguyen Van Khanh" },
-  { email: "admin@gmail.com", name: "Admin" },
+  { email: "a@gmail.com", name: "Nguyen Van A", password: "123456", role: "User" },
+  { email: "admin@gmail.com", name: "Admin", password: "admin123", role: "Admin" },
 ];
 
 const AuthPage = () => {
@@ -275,8 +261,8 @@ const AuthPage = () => {
     }
   };
 
-  const handleQuickLogin = (email: string) => {
-    setForm({ ...form, email, password: "123456" });
+  const handleQuickLogin = (email: string, password: string) => {
+    setForm({ ...form, email, password });
     setErrors({});
     setMessage("");
   };
@@ -309,20 +295,23 @@ const AuthPage = () => {
             {mode === "login" && !otpStep && (
               <div className="demo-accounts">
                 <h3 style={{ marginBottom: 12, fontSize: 15, color: "#ccc" }}>
-                  Tài khoản demo (mật khẩu: 123456)
+                  Tài khoản demo
                 </h3>
                 <div className="demo-account-grid">
-                  {DEMO_ACCOUNTS.slice(0, 10).map((acc) => (
+                  {DEMO_ACCOUNTS.map((acc) => (
                     <button
                       key={acc.email}
                       className={`demo-account-btn ${form.email === acc.email ? "active" : ""}`}
-                      onClick={() => handleQuickLogin(acc.email)}
+                      onClick={() => handleQuickLogin(acc.email, acc.password)}
                       type="button"
                     >
                       <span className="demo-avatar">{acc.name.charAt(0)}</span>
                       <div>
                         <span className="demo-name">{acc.name}</span>
                         <span className="demo-email">{acc.email}</span>
+                        <span className="demo-email">
+                          {acc.role} - mật khẩu: {acc.password}
+                        </span>
                       </div>
                     </button>
                   ))}

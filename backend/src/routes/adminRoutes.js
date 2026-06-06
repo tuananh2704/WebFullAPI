@@ -19,7 +19,9 @@ router.get("/export/bookings", adminController.exportBookings);
 router.get("/export/revenue", adminController.exportRevenue);
 
 router.get("/users", adminController.getUsers);
+router.post("/vouchers/bulk", adminController.createBulkUserVoucher);
 router.get("/users/:id", adminController.getUserDetail);
+router.post("/users/:id/vouchers", adminController.createUserVoucher);
 router.patch("/users/:id/role", adminController.updateUserRole);
 router.patch("/users/:id/status", adminController.updateUserStatus);
 

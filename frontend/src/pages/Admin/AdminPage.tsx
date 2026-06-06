@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
   BarChart3,
+  Bell,
   CalendarClock,
   Clapperboard,
   CreditCard,
@@ -41,6 +42,8 @@ import {
   updateAdminFoodSize,
   deleteAdminFoodSize,
   approveAllPendingBookings,
+  createAdminBulkVoucher,
+  createAdminUserVoucher,
 } from "../../services/adminService";
 import type { AdminBooking, AdminUser } from "../../services/adminService";
 import { getMovies } from "../../services/movieService";
@@ -50,6 +53,42 @@ import type { ApiMovie, ApiShowtime, ApiFood, ApiFoodSize, ApiCinema } from "../
 import { formatDateTime, parseLocalDateTime } from "../../utils/format";
 
 type AdminTab = "overview" | "movies" | "showtimes" | "bookings" | "users" | "foods";
+
+const MIN_HOURS_BEFORE_SHOWTIME = 3;
+const SHOWTIME_MIN_MESSAGE = "Suất chiếu phải bắt đầu sau thời điểm hiện tại ít nhất 3 tiếng.";
+
+const toDateTimeLocalValue = (date: Date) => {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}`;
+};
+
+const toDateInputValue = (value?: string | null) => {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+};
+
+const getMinShowtimeDate = () => {
+  const now = new Date();
+  now.setHours(now.getHours() + MIN_HOURS_BEFORE_SHOWTIME);
+  return now;
+};
+
+const isValidShowtimeStart = (startTime: string) => {
+  if (!startTime) return false;
+  const selected = new Date(startTime);
+  return selected.getTime() >= getMinShowtimeDate().getTime();
+};
+
+const formatMoney = (value?: string | number | null) =>
+  `${Number(value || 0).toLocaleString("vi-VN")} đ`;
 
 type FoodForm = {
   id: string;
@@ -157,6 +196,9 @@ const AdminPage = () => {
   const [sizeForm, setSizeForm] = useState<SizeForm>(emptySizeForm);
   const [isUserModalVisible, setIsUserModalVisible] = useState(false);
   const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [pendingNotifications, setPendingNotifications] = useState<AdminBooking[]>([]);
+  const [pendingNotificationTotal, setPendingNotificationTotal] = useState(0);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
 
  const loadBookings = async (filters = bookingFilters) => {
   const bookingData = await getAdminBookings(filters);
@@ -184,6 +226,25 @@ const AdminPage = () => {
   }));
 };
 
+  const loadPendingNotifications = async () => {
+    const pendingData = await getAdminBookings({
+      status: "PENDING",
+      page: 1,
+      limit: 8,
+    });
+
+    const items = Array.isArray(pendingData)
+      ? pendingData
+      : pendingData?.items ?? [];
+
+    setPendingNotifications(items);
+    setPendingNotificationTotal(
+      Array.isArray(pendingData)
+        ? items.length
+        : pendingData?.total ?? items.length
+    );
+  };
+
   const loadAdminData = async () => {
     setIsLoading(true);
     try {
@@ -204,7 +265,7 @@ const AdminPage = () => {
       setFoods(foodsData);
       setCinemas(cinemaData);
 
-      await loadBookings();
+      await Promise.all([loadBookings(), loadPendingNotifications()]);
       setMessage("");
     } catch (error: any) {
       setMessage(
@@ -485,6 +546,14 @@ const AdminPage = () => {
 
   const handleSubmitShowtime = async (event: FormEvent) => {
     event.preventDefault();
+    if (!showtimeForm.id && !isValidShowtimeStart(showtimeForm.start_time)) {
+      notification.error({
+        message: "Thời gian suất chiếu không hợp lệ",
+        description: SHOWTIME_MIN_MESSAGE,
+      });
+      return;
+    }
+
     try {
       const payload = {
         movie_id: Number(showtimeForm.movie_id),
@@ -531,7 +600,7 @@ const AdminPage = () => {
             ? "Đã xác nhận đơn hàng thành công."
             : "Đã hủy đơn hàng thành công.",
       });
-      await loadBookings();
+      await Promise.all([loadBookings(), loadPendingNotifications()]);
     } catch (error: any) {
       notification.error({
         message: "Lỗi cập nhật đơn hàng",
@@ -555,13 +624,27 @@ const AdminPage = () => {
             ? `Đã duyệt ${result.approved} đơn hàng.`
             : "Không có đơn PENDING hợp lệ để duyệt.",
       });
-      await loadBookings();
+      await Promise.all([loadBookings(), loadPendingNotifications()]);
     } catch (error: any) {
       notification.error({
         message: "Lỗi duyệt tất cả",
         description: error.response?.data?.message || "Không thể duyệt tất cả đơn hàng.",
       });
     }
+  };
+
+  const openPendingBookings = async () => {
+    const nextFilters = {
+      ...bookingFilters,
+      status: "PENDING" as const,
+      page: 1,
+    };
+
+    setIsNotificationOpen(false);
+    setActiveTab("bookings");
+    setBookingFilters(nextFilters);
+    await loadBookings(nextFilters);
+    await loadPendingNotifications();
   };
 
   const editMovie = (movie: ApiMovie) => {
@@ -571,7 +654,7 @@ const AdminPage = () => {
       description: movie.description || "",
       director: movie.director || "",
       duration: String(movie.duration || ""),
-      release_date: movie.release_date?.slice(0, 10) || "",
+      release_date: toDateInputValue(movie.release_date),
       poster_url: movie.poster_url || "",
       trailer_url: movie.trailer_url || "",
       language: movie.language || "Vietnamese",
@@ -669,6 +752,65 @@ const AdminPage = () => {
     }
   };
 
+  const handleSendUserVoucher = async (
+    userId: number,
+    payload: { discount_amount: number; scope: "GENERAL" | "VIP" }
+  ) => {
+    try {
+      const voucher = await createAdminUserVoucher(userId, payload);
+
+      notification.success({
+        message: "Đã gửi voucher",
+        description: (
+          <div className="admin-voucher-toast">
+            <span>
+              Mã <strong>{voucher.code}</strong> đã được gửi vào thông báo của khách hàng.
+            </span>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard?.writeText(voucher.code)}
+            >
+              Copy
+            </button>
+          </div>
+        ),
+      });
+    } catch (error: any) {
+      notification.error({
+        message: "Lỗi gửi voucher",
+        description: error.response?.data?.message || "Không tạo được voucher.",
+      });
+    }
+  };
+
+  const handleSendBulkVoucher = async (payload: { discount_amount: number; code: string }) => {
+    try {
+      const voucher = await createAdminBulkVoucher(payload);
+
+      notification.success({
+        message: "Đã gửi voucher chung",
+        description: (
+          <div className="admin-voucher-toast">
+            <span>
+              Mã <strong>{voucher.code}</strong> đã gửi cho {voucher.sent_count || 0} tài khoản.
+            </span>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard?.writeText(voucher.code)}
+            >
+              Copy
+            </button>
+          </div>
+        ),
+      });
+    } catch (error: any) {
+      notification.error({
+        message: "Lỗi gửi voucher chung",
+        description: error.response?.data?.message || "Không tạo được voucher chung.",
+      });
+    }
+  };
+
   return (
     <section className="app-page admin-page">
 
@@ -680,14 +822,77 @@ const AdminPage = () => {
             <p className="muted">Theo dõi doanh thu, đơn hàng, phim, suất chiếu và dữ liệu người dùng.</p>
           </div>
 
-          <button
-            className="secondary-btn compact admin-refresh"
-            onClick={loadAdminData}
-            disabled={isLoading}
-          >
-            <RefreshCw size={18} />
-            Tải lại
-          </button>
+          <div className="admin-hero-actions">
+            <div className="admin-notification-wrap">
+              <button
+                className="secondary-btn compact admin-bell-btn"
+                type="button"
+                onClick={() => setIsNotificationOpen((current) => !current)}
+                title="Đơn hàng chưa duyệt"
+              >
+                <Bell size={18} />
+                {pendingNotificationTotal > 0 && (
+                  <span className="admin-notification-badge">
+                    {pendingNotificationTotal > 99 ? "99+" : pendingNotificationTotal}
+                  </span>
+                )}
+              </button>
+
+              {isNotificationOpen && (
+                <div className="admin-notification-panel">
+                  <div className="admin-notification-header">
+                    <div>
+                      <strong>Thông báo</strong>
+                      <span>{pendingNotificationTotal} đơn chưa duyệt</span>
+                    </div>
+
+                    <button type="button" onClick={openPendingBookings}>
+                      Xem tất cả
+                    </button>
+                  </div>
+
+                  <div className="admin-notification-tabs">
+                    <span className="active">Chưa duyệt</span>
+                  </div>
+
+                  <div className="admin-notification-list">
+                    {pendingNotifications.length > 0 ? (
+                      pendingNotifications.map((booking) => (
+                        <button
+                          type="button"
+                          className="admin-notification-item"
+                          key={booking.id}
+                          onClick={openPendingBookings}
+                        >
+                          <span className="admin-notification-dot" />
+                          <div>
+                            <strong>{booking.booking_code}</strong>
+                            <p>
+                              {booking.customer_name || "Khách hàng"} đặt {booking.movie_title}
+                            </p>
+                            <small>
+                              {formatDateTime(booking.start_time)} · {formatMoney(booking.total_amount)}
+                            </small>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="admin-notification-empty">Không có đơn hàng chưa duyệt.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button
+              className="secondary-btn compact admin-refresh"
+              onClick={loadAdminData}
+              disabled={isLoading}
+            >
+              <RefreshCw size={18} />
+              Tải lại
+            </button>
+          </div>
         </div>
 
         {message && <p className="section-state warning">{message}</p>}
@@ -782,6 +987,7 @@ const AdminPage = () => {
             editShowtime={editShowtime}
             deleteShowtime={handleDeleteShowtime}
             formatDateTime={formatDateTime}
+            minShowtimeDateTime={toDateTimeLocalValue(getMinShowtimeDate())}
           />
         )}
 
@@ -812,6 +1018,8 @@ const AdminPage = () => {
             onUserRoleChange={handleUserRoleChange}
             onUserStatusChange={handleUserStatusChange}
             onViewUserDetail={handleViewUserDetail}
+            onSendUserVoucher={handleSendUserVoucher}
+            onSendBulkVoucher={handleSendBulkVoucher}
             onDeleteUser={handleDeleteUser}
             selectedUser={selectedUser}
             isUserModalVisible={isUserModalVisible}
@@ -824,4 +1032,3 @@ const AdminPage = () => {
 };
 
 export default AdminPage;
-

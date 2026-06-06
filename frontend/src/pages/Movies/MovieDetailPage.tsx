@@ -637,8 +637,11 @@ const MovieDetailPage = () => {
       return;
     }
 
+    const nextTransferContent = generateTransferContent();
     setBookingLoading(true);
     setMessage("");
+    setTransferContent(nextTransferContent);
+    setShowPaymentModal(true);
     try {
       const foodPayload = buildFoodPayload();
 
@@ -651,10 +654,10 @@ const MovieDetailPage = () => {
         use_free_popcorn: freePopcornDiscount > 0,
       });
 
-      const nextTransferContent = `CK ${booking.booking_code || generateTransferContent()}`;
-      setTransferContent(nextTransferContent);
       setTicketData(booking);
-      setShowPaymentModal(true);
+      setPromotionCode("");
+      setAppliedPromotionCode("");
+      setDiscount(0);
       if (freePopcornDiscount > 0) {
         localStorage.removeItem("cinemax_use_free_popcorn");
         setUseFreePopcorn(false);
@@ -680,6 +683,8 @@ const MovieDetailPage = () => {
         );
       }
     } catch (error: any) {
+      setShowPaymentModal(false);
+      setTransferContent("");
       setMessage(error.response?.data?.message || "Không tạo được booking.");
     } finally {
       setBookingLoading(false);
@@ -724,6 +729,9 @@ const MovieDetailPage = () => {
 
       const detail = await getBookingDetail(booking.id);
       setTicketData(detail);
+      setPromotionCode("");
+      setAppliedPromotionCode("");
+      setDiscount(0);
       setShowPaymentModal(false);
       setTransferContent("");
       setMessage("Đơn thanh toán bằng điểm VIP đang chờ admin duyệt.");

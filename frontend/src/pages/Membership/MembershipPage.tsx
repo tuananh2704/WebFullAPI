@@ -119,9 +119,14 @@ const MembershipPage = () => {
     setVouchers(voucherData);
   };
 
-  const voucherTotalPages = Math.max(1, Math.ceil(vouchers.length / voucherPageSize));
+  const availableVouchers = vouchers.filter((voucher) => {
+    if (voucher.status !== "AVAILABLE") return false;
+    if (!voucher.expires_at) return true;
+    return new Date(voucher.expires_at).getTime() >= Date.now();
+  });
+  const voucherTotalPages = Math.max(1, Math.ceil(availableVouchers.length / voucherPageSize));
   const currentVoucherPage = Math.min(voucherPage, voucherTotalPages);
-  const visibleVouchers = vouchers.slice(
+  const visibleVouchers = availableVouchers.slice(
     (currentVoucherPage - 1) * voucherPageSize,
     currentVoucherPage * voucherPageSize
   );
@@ -390,7 +395,7 @@ const MembershipPage = () => {
                 );
               })}
             </div>
-            {vouchers.length > 0 && (
+            {availableVouchers.length > 0 && (
               <div className="voucher-list">
                 {visibleVouchers.map((voucher) => (
                   <div className="voucher-code-row" key={voucher.id}>
@@ -403,7 +408,6 @@ const MembershipPage = () => {
                     <button
                       type="button"
                       onClick={() => handleCopyVoucher(voucher.code)}
-                      disabled={voucher.status !== "AVAILABLE"}
                     >
                       <Copy size={15} />
                       Copy

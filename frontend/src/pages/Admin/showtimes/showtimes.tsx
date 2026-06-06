@@ -22,6 +22,7 @@ type ShowtimesSectionProps = {
   editShowtime: (showtime: ApiShowtime) => void;
   deleteShowtime: (showtimeId: number) => Promise<void>;
   formatDateTime: (value: string) => string;
+  minShowtimeDateTime: string;
 };
 
 const cellStyle: React.CSSProperties = {
@@ -55,6 +56,7 @@ const ShowtimesSection: React.FC<ShowtimesSectionProps> = ({
   editShowtime,
   deleteShowtime,
   formatDateTime,
+  minShowtimeDateTime,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [cinemaFilter, setCinemaFilter] = useState("ALL");
@@ -74,6 +76,14 @@ const ShowtimesSection: React.FC<ShowtimesSectionProps> = ({
     () => selectedCinema?.rooms?.filter((room) => room.status === "ACTIVE") || [],
     [selectedCinema]
   );
+  const startTimeMin = useMemo(() => {
+    const releaseMin = selectedMovie?.release_date
+      ? `${selectedMovie.release_date.slice(0, 10)}T00:00`
+      : "";
+
+    if (!releaseMin) return minShowtimeDateTime;
+    return releaseMin > minShowtimeDateTime ? releaseMin : minShowtimeDateTime;
+  }, [minShowtimeDateTime, selectedMovie?.release_date]);
 
   const cinemaOptions = useMemo(
     () =>
@@ -197,7 +207,7 @@ const ShowtimesSection: React.FC<ShowtimesSectionProps> = ({
         <input
           required
           type="datetime-local"
-          min={selectedMovie?.release_date ? `${selectedMovie.release_date.slice(0, 10)}T00:00` : undefined}
+          min={showtimeForm.id ? undefined : startTimeMin}
           value={showtimeForm.start_time}
           onChange={(e) => {
             const startTime = e.target.value;

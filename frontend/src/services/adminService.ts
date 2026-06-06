@@ -171,6 +171,25 @@ export type AdminUser = {
   is_active?: "ACTIVE" | "BLOCKED";
   status?: "ACTIVE" | "BLOCKED";
   roles: string;
+  membership_points?: number | string;
+  membership_tier_name?: string | null;
+  membership_tier_color?: string | null;
+};
+
+export type AdminVoucherPayload = {
+  discount_amount: number;
+  scope: "GENERAL" | "VIP";
+};
+
+export type AdminUserVoucher = {
+  id: number;
+  user_id?: number;
+  code: string;
+  discount_amount: number;
+  scope: "GENERAL" | "VIP";
+  target_tier_name?: string | null;
+  expires_in_days: number;
+  sent_count?: number;
 };
 
 export const getAdminUsers = async (params?: { role?: string; search?: string }) => {
@@ -207,6 +226,25 @@ export const deleteAdminUser = async (id: number) => {
 
 export const getAdminUserDetail = async (id: number) => {
   const response = await apiClient.get<ApiResponse<AdminUser>>( `/admin/users/${id}`);
+  return response.data.data;
+};
+
+export const createAdminUserVoucher = async (id: number, payload: AdminVoucherPayload) => {
+  const response = await apiClient.post<ApiResponse<AdminUserVoucher>>(
+    `/admin/users/${id}/vouchers`,
+    payload
+  );
+  return response.data.data;
+};
+
+export const createAdminBulkVoucher = async (payload: {
+  discount_amount: number;
+  code?: string;
+}) => {
+  const response = await apiClient.post<ApiResponse<AdminUserVoucher>>(
+    "/admin/vouchers/bulk",
+    payload
+  );
   return response.data.data;
 };
 

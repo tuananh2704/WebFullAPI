@@ -20,22 +20,92 @@ const ensureVoucherTables = async (db = pool) => {
     CREATE TABLE IF NOT EXISTS user_vouchers (
       id BIGINT PRIMARY KEY AUTO_INCREMENT,
       user_id BIGINT NOT NULL,
-      promotion_id BIGINT NOT NULL UNIQUE,
-      code VARCHAR(50) NOT NULL UNIQUE,
+      promotion_id BIGINT NOT NULL,
+      code VARCHAR(50) NOT NULL,
       discount_amount INT NOT NULL,
       points_cost INT NOT NULL,
       status ENUM('AVAILABLE','RESERVED','USED') NOT NULL DEFAULT 'AVAILABLE',
       booking_id BIGINT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       reserved_at TIMESTAMP NULL,
+      expires_at DATETIME NULL,
+      source ENUM('POINT_EXCHANGE','ADMIN_GIFT') NOT NULL DEFAULT 'POINT_EXCHANGE',
+      target_tier_id INT NULL,
       FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
       FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE CASCADE,
-      FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE SET NULL
+      FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE SET NULL,
+      FOREIGN KEY (target_tier_id) REFERENCES membership_tiers(id) ON DELETE SET NULL
     )
   `);
   await db.execute(
     "ALTER TABLE user_vouchers MODIFY status ENUM('AVAILABLE','RESERVED','USED') NOT NULL DEFAULT 'AVAILABLE'"
   );
+  await ensureColumn(db, "user_vouchers", "expires_at", "expires_at DATETIME NULL");
+  await ensureColumn(
+    db,
+    "user_vouchers",
+    "source",
+    "source ENUM('POINT_EXCHANGE','ADMIN_GIFT') NOT NULL DEFAULT 'POINT_EXCHANGE'"
+  );
+  await ensureColumn(db, "user_vouchers", "target_tier_id", "target_tier_id INT NULL");
+  await ensureIndex(db, "user_vouchers", "idx_user_vouchers_promotion", "promotion_id");
+  await ensureIndex(db, "user_vouchers", "idx_user_vouchers_code", "code");
+  await dropUniqueVoucherIndexes(db);
+};
+
+const ensureIndex = async (db, tableName, indexName, columnName) => {
+  const [rows] = await db.execute(
+    `
+    SELECT INDEX_NAME
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ?
+      AND INDEX_NAME = ?
+    LIMIT 1
+    `,
+    [tableName, indexName]
+  );
+
+  if (!rows[0]) {
+    await db.execute(`CREATE INDEX \`${indexName}\` ON \`${tableName}\`(\`${columnName}\`)`);
+  }
+};
+
+const dropUniqueVoucherIndexes = async (db) => {
+  const [rows] = await db.execute(
+    `
+    SELECT INDEX_NAME
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'user_vouchers'
+      AND COLUMN_NAME IN ('promotion_id', 'code')
+      AND NON_UNIQUE = 0
+      AND INDEX_NAME <> 'PRIMARY'
+    GROUP BY INDEX_NAME
+    `
+  );
+
+  for (const row of rows) {
+    await db.execute(`ALTER TABLE user_vouchers DROP INDEX \`${row.INDEX_NAME}\``);
+  }
+};
+
+const ensureColumn = async (db, tableName, columnName, definition) => {
+  const [rows] = await db.execute(
+    `
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ?
+      AND COLUMN_NAME = ?
+    LIMIT 1
+    `,
+    [tableName, columnName]
+  );
+
+  if (!rows[0]) {
+    await db.execute(`ALTER TABLE ${tableName} ADD COLUMN ${definition}`);
+  }
 };
 
 const generateVoucherCode = () => {
@@ -348,16 +418,47 @@ const getUserVouchers = async (userId) => {
   await ensureVoucherTables();
   const [rows] = await pool.execute(
     `
-    SELECT id, code, discount_amount, points_cost, status, created_at
-    FROM user_vouchers
-    WHERE user_id = ?
-    ORDER BY created_at DESC
+    SELECT
+      uv.id, uv.code, uv.discount_amount, uv.points_cost, uv.status,
+      uv.created_at, uv.expires_at, uv.source, uv.target_tier_id,
+      mt.name AS target_tier_name
+    FROM user_vouchers uv
+    LEFT JOIN membership_tiers mt ON mt.id = uv.target_tier_id
+    WHERE uv.user_id = ?
+      AND uv.status = 'AVAILABLE'
+      AND (uv.expires_at IS NULL OR uv.expires_at >= NOW())
+      AND NOT EXISTS (
+        SELECT 1
+        FROM booking_promotions bp
+        JOIN bookings b ON b.id = bp.booking_id
+        WHERE bp.promotion_id = uv.promotion_id
+          AND b.user_id = uv.user_id
+          AND b.booking_status IN ('PENDING', 'CONFIRMED')
+      )
+    ORDER BY uv.created_at DESC
     LIMIT 20
     `,
     [userId]
   );
 
   return rows;
+};
+
+const getUserVoucherByPromotion = async (connection, promotionId) => {
+  const [rows] = await connection.execute(
+    `
+    SELECT
+      uv.id, uv.user_id, uv.status, uv.expires_at, uv.target_tier_id,
+      um.tier_id AS user_tier_id
+    FROM user_vouchers uv
+    LEFT JOIN user_memberships um ON um.user_id = uv.user_id
+    WHERE uv.promotion_id = ?
+    LIMIT 1
+    `,
+    [promotionId]
+  );
+
+  return rows[0] || null;
 };
 
 const exchangePointsForVoucher = async (userId, discountAmount) => {
@@ -424,25 +525,42 @@ const exchangePointsForVoucher = async (userId, discountAmount) => {
 const reserveUserVoucher = async (connection, userId, promotionId, bookingId) => {
   const [rows] = await connection.execute(
     `
-    SELECT id, user_id, status
-    FROM user_vouchers
-    WHERE promotion_id = ?
+    SELECT uv.id, uv.user_id, uv.status, uv.expires_at, uv.target_tier_id,
+           um.tier_id AS user_tier_id
+    FROM user_vouchers uv
+    LEFT JOIN user_memberships um ON um.user_id = uv.user_id
+    WHERE uv.promotion_id = ?
+      AND uv.user_id = ?
     LIMIT 1
     FOR UPDATE
     `,
-    [promotionId]
+    [promotionId, userId]
   );
 
   if (!rows[0]) {
+    const [voucherRows] = await connection.execute(
+      "SELECT id FROM user_vouchers WHERE promotion_id = ? LIMIT 1",
+      [promotionId]
+    );
+    if (voucherRows[0]) {
+      throw new AppError("Voucher không thuộc tài khoản này.", 403);
+    }
     return { is_user_voucher: false, reserved: false };
   }
 
-  if (Number(rows[0].user_id) !== Number(userId)) {
-    throw new AppError("Voucher does not belong to this user", 403);
+  if (rows[0].status !== "AVAILABLE") {
+    throw new AppError("Voucher đã được sử dụng.", 400);
   }
 
-  if (rows[0].status !== "AVAILABLE") {
-    throw new AppError("Voucher has already been used", 400);
+  if (rows[0].expires_at && new Date(rows[0].expires_at).getTime() < Date.now()) {
+    throw new AppError("Voucher đã hết hạn.", 400);
+  }
+
+  if (
+    rows[0].target_tier_id &&
+    Number(rows[0].target_tier_id) !== Number(rows[0].user_tier_id)
+  ) {
+    throw new AppError("Voucher này chỉ dùng cho đúng hạng VIP được gửi.", 403);
   }
 
   await connection.execute(
@@ -453,7 +571,6 @@ const reserveUserVoucher = async (connection, userId, promotionId, bookingId) =>
     `,
     [bookingId, rows[0].id]
   );
-  await connection.execute("UPDATE promotions SET is_active = FALSE WHERE id = ?", [promotionId]);
   return { is_user_voucher: true, reserved: true };
 };
 
@@ -471,7 +588,6 @@ const finalizeBookingVouchers = async (connection, bookingId) => {
 
   for (const voucher of rows) {
     await connection.execute("UPDATE user_vouchers SET status = 'USED' WHERE id = ?", [voucher.id]);
-    await connection.execute("UPDATE promotions SET is_active = FALSE WHERE id = ?", [voucher.promotion_id]);
   }
 };
 
@@ -496,9 +612,6 @@ const restoreBookingVouchers = async (connection, bookingId) => {
       `,
       [voucher.id]
     );
-    await connection.execute("UPDATE promotions SET is_active = TRUE WHERE id = ?", [
-      voucher.promotion_id,
-    ]);
   }
 };
 
@@ -697,6 +810,7 @@ module.exports = {
   recordBenefitUsage,
   consumeFreePopcornBenefit,
   getUserVouchers,
+  getUserVoucherByPromotion,
   exchangePointsForVoucher,
   reserveUserVoucher,
   finalizeBookingVouchers,

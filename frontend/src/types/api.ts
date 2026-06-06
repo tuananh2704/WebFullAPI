@@ -231,4 +231,5 @@ export type ApiUserVoucher = {
   points_cost: number;
   status: "AVAILABLE" | "RESERVED" | "USED";
   created_at?: string;
+  expires_at?: string | null;
 };

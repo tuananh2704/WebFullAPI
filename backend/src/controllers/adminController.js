@@ -62,6 +62,16 @@ const getUserDetail = asyncHandler(async (req, res) => {
   return successResponse(res, "Get user detail successfully", user);
 });
 
+const createUserVoucher = asyncHandler(async (req, res) => {
+  const voucher = await adminService.createUserVoucher(req.params.id, req.body || {});
+  return successResponse(res, "Create user voucher successfully", voucher, 201);
+});
+
+const createBulkUserVoucher = asyncHandler(async (req, res) => {
+  const voucher = await adminService.createBulkUserVoucher(req.body || {});
+  return successResponse(res, "Create bulk user voucher successfully", voucher, 201);
+});
+
 const getAdminFoods = asyncHandler(async (req, res) => {
   const foods = await adminService.getAdminFoods();
   return successResponse(res, "Get foods successfully", foods);
@@ -157,6 +167,8 @@ module.exports = {
   updateUserStatus,
   deleteUser,
   getUserDetail,
+  createUserVoucher,
+  createBulkUserVoucher,
   getAdminFoods,
   createAdminFood,
   updateAdminFood,

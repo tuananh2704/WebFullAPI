@@ -1,5 +1,108 @@
 const pool = require("../configs/db");
 const membershipService = require("./membershipService");
+const notificationService = require("./notificationService");
+
+const ensureColumn = async (db, tableName, columnName, definition) => {
+  const [rows] = await db.execute(
+    `
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ?
+      AND COLUMN_NAME = ?
+    LIMIT 1
+    `,
+    [tableName, columnName]
+  );
+
+  if (!rows[0]) {
+    await db.execute(`ALTER TABLE ${tableName} ADD COLUMN ${definition}`);
+  }
+};
+
+const ensureIndex = async (db, tableName, indexName, columnName) => {
+  const [rows] = await db.execute(
+    `
+    SELECT INDEX_NAME
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ?
+      AND INDEX_NAME = ?
+    LIMIT 1
+    `,
+    [tableName, indexName]
+  );
+
+  if (!rows[0]) {
+    await db.execute(`CREATE INDEX \`${indexName}\` ON \`${tableName}\`(\`${columnName}\`)`);
+  }
+};
+
+const dropUniqueVoucherIndexes = async (db) => {
+  const [rows] = await db.execute(
+    `
+    SELECT INDEX_NAME
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'user_vouchers'
+      AND COLUMN_NAME IN ('promotion_id', 'code')
+      AND NON_UNIQUE = 0
+      AND INDEX_NAME <> 'PRIMARY'
+    GROUP BY INDEX_NAME
+    `
+  );
+
+  for (const row of rows) {
+    await db.execute(`ALTER TABLE user_vouchers DROP INDEX \`${row.INDEX_NAME}\``);
+  }
+};
+
+const ensureAdminVoucherSchema = async (db = pool) => {
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS user_vouchers (
+      id BIGINT PRIMARY KEY AUTO_INCREMENT,
+      user_id BIGINT NOT NULL,
+      promotion_id BIGINT NOT NULL,
+      code VARCHAR(50) NOT NULL,
+      discount_amount INT NOT NULL,
+      points_cost INT NOT NULL DEFAULT 0,
+      status ENUM('AVAILABLE','RESERVED','USED') NOT NULL DEFAULT 'AVAILABLE',
+      booking_id BIGINT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      reserved_at TIMESTAMP NULL,
+      expires_at DATETIME NULL,
+      source ENUM('POINT_EXCHANGE','ADMIN_GIFT') NOT NULL DEFAULT 'ADMIN_GIFT',
+      target_tier_id INT NULL,
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE CASCADE,
+      FOREIGN KEY (booking_id) REFERENCES bookings(id) ON DELETE SET NULL,
+      FOREIGN KEY (target_tier_id) REFERENCES membership_tiers(id) ON DELETE SET NULL
+    )
+  `);
+  await db.execute(
+    "ALTER TABLE user_vouchers MODIFY status ENUM('AVAILABLE','RESERVED','USED') NOT NULL DEFAULT 'AVAILABLE'"
+  );
+  await ensureColumn(db, "user_vouchers", "expires_at", "expires_at DATETIME NULL");
+  await ensureColumn(
+    db,
+    "user_vouchers",
+    "source",
+    "source ENUM('POINT_EXCHANGE','ADMIN_GIFT') NOT NULL DEFAULT 'POINT_EXCHANGE'"
+  );
+  await ensureColumn(db, "user_vouchers", "target_tier_id", "target_tier_id INT NULL");
+  await ensureIndex(db, "user_vouchers", "idx_user_vouchers_promotion", "promotion_id");
+  await ensureIndex(db, "user_vouchers", "idx_user_vouchers_code", "code");
+  await dropUniqueVoucherIndexes(db);
+};
+
+const generateAdminVoucherCode = () => {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let suffix = "";
+  for (let i = 0; i < 10; i += 1) {
+    suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `CINE${suffix}`;
+};
 
 const autoCancelExpiredPendingBookings = async () => {
   const connection = await pool.getConnection();
@@ -438,11 +541,16 @@ const approvePendingBookings = async (filters = {}) => {
 const getUsers = async (filters = {}) => {
   const { role, search } = filters;
   let query = `
-    SELECT u.id, u.full_name, u.email, u.phone, u.status as is_active, 
-           GROUP_CONCAT(r.name) as roles
+    SELECT u.id, u.full_name, u.email, u.phone, u.status as is_active,
+           GROUP_CONCAT(r.name) as roles,
+           COALESCE(um.points, 0) as membership_points,
+           COALESCE(mt.name, 'Thành viên') as membership_tier_name,
+           COALESCE(mt.color_hex, '#9E9E9E') as membership_tier_color
     FROM users u
     JOIN user_roles ur ON u.id = ur.user_id
     JOIN roles r ON ur.role_id = r.id
+    LEFT JOIN user_memberships um ON um.user_id = u.id
+    LEFT JOIN membership_tiers mt ON mt.id = um.tier_id
     WHERE 1=1
   `;
   const params = [];
@@ -457,7 +565,11 @@ const getUsers = async (filters = {}) => {
     params.push(`%${search}%`, `%${search}%`);
   }
 
-  query += " GROUP BY u.id ORDER BY u.id DESC";
+  query += `
+    GROUP BY u.id, u.full_name, u.email, u.phone, u.status,
+             um.points, mt.name, mt.color_hex
+    ORDER BY u.id DESC
+  `;
 
   const [rows] = await pool.execute(query, params);
   return rows;
@@ -519,16 +631,252 @@ const deleteUser = async (userId) => {
 
 const getUserDetail = async (userId) => {
   const [userRows] = await pool.execute(
-    `SELECT u.id, u.full_name, u.email, u.phone, u.birth_date, u.status, 
-            GROUP_CONCAT(r.name) as roles
+    `SELECT u.id, u.full_name, u.email, u.phone, u.birth_date, u.status,
+            GROUP_CONCAT(r.name) as roles,
+            COALESCE(um.points, 0) as membership_points,
+            COALESCE(mt.name, 'Thành viên') as membership_tier_name,
+            COALESCE(mt.color_hex, '#9E9E9E') as membership_tier_color
      FROM users u
      JOIN user_roles ur ON u.id = ur.user_id
      JOIN roles r ON ur.role_id = r.id
+     LEFT JOIN user_memberships um ON um.user_id = u.id
+     LEFT JOIN membership_tiers mt ON mt.id = um.tier_id
      WHERE u.id = ?
-     GROUP BY u.id`, 
+     GROUP BY u.id, u.full_name, u.email, u.phone, u.birth_date, u.status,
+              um.points, mt.name, mt.color_hex`,
     [userId]
   );
   return userRows[0];
+};
+
+const createUserVoucher = async (userId, payload = {}) => {
+  const AppError = require("../utils/AppError");
+  const discountAmount = Math.floor(Number(payload.discount_amount || 0));
+  const scope = payload.scope === "VIP" ? "VIP" : "GENERAL";
+
+  if (!discountAmount || discountAmount < 1000) {
+    throw new AppError("Giá trị voucher phải từ 1.000đ trở lên.", 400);
+  }
+
+  await ensureAdminVoucherSchema();
+  await notificationService.ensureNotificationTables();
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [userRows] = await connection.execute(
+      `
+      SELECT u.id, u.full_name, u.email, um.tier_id, mt.name AS tier_name
+      FROM users u
+      LEFT JOIN user_memberships um ON um.user_id = u.id
+      LEFT JOIN membership_tiers mt ON mt.id = um.tier_id
+      WHERE u.id = ?
+      LIMIT 1
+      FOR UPDATE
+      `,
+      [userId]
+    );
+
+    const user = userRows[0];
+    if (!user) {
+      throw new AppError("User not found", 404);
+    }
+
+    const targetTierId = scope === "VIP" ? user.tier_id || null : null;
+    if (scope === "VIP" && !targetTierId) {
+      throw new AppError("Người dùng chưa có hạng VIP để gửi voucher VIP.", 400);
+    }
+
+    let code = generateAdminVoucherCode();
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const [existing] = await connection.execute(
+        "SELECT id FROM promotions WHERE code = ? LIMIT 1",
+        [code]
+      );
+      if (!existing[0]) break;
+      code = generateAdminVoucherCode();
+    }
+
+    const [duplicateRows] = await connection.execute(
+      "SELECT id FROM promotions WHERE code = ? LIMIT 1",
+      [code]
+    );
+    if (duplicateRows[0]) {
+      throw new AppError("Không tạo được mã voucher, vui lòng thử lại.", 500);
+    }
+
+    const [promotionResult] = await connection.execute(
+      `
+      INSERT INTO promotions(code, name, discount_type, discount_value, min_amount, expire_date, is_active)
+      VALUES (?, ?, 'FIXED', ?, 0, DATE_ADD(CURDATE(), INTERVAL 5 DAY), TRUE)
+      `,
+      [
+        code,
+        scope === "VIP"
+          ? `Voucher VIP ${user.tier_name || ""}`.trim()
+          : "Voucher khách hàng",
+        discountAmount,
+      ]
+    );
+
+    const [voucherResult] = await connection.execute(
+      `
+      INSERT INTO user_vouchers
+        (user_id, promotion_id, code, discount_amount, points_cost, expires_at, source, target_tier_id)
+      VALUES (?, ?, ?, ?, 0, DATE_ADD(NOW(), INTERVAL 5 DAY), 'ADMIN_GIFT', ?)
+      `,
+      [user.id, promotionResult.insertId, code, discountAmount, targetTierId]
+    );
+
+    await notificationService.createNotification(
+      {
+        user_id: user.id,
+        title: "Bạn nhận được voucher mới",
+        message:
+          scope === "VIP"
+            ? `CINEMAX gửi bạn voucher ${code} trị giá ${discountAmount.toLocaleString("vi-VN")}đ dành cho hạng ${user.tier_name}. Mã có hạn 5 ngày.`
+            : `CINEMAX gửi bạn voucher ${code} trị giá ${discountAmount.toLocaleString("vi-VN")}đ. Mã có hạn 5 ngày.`,
+        type: "VOUCHER",
+        payload: {
+          voucher_id: voucherResult.insertId,
+          code,
+          discount_amount: discountAmount,
+          scope,
+          target_tier_name: scope === "VIP" ? user.tier_name : null,
+          expires_in_days: 5,
+        },
+      },
+      connection
+    );
+
+    await connection.commit();
+
+    return {
+      id: voucherResult.insertId,
+      user_id: user.id,
+      code,
+      discount_amount: discountAmount,
+      scope,
+      target_tier_id: targetTierId,
+      target_tier_name: scope === "VIP" ? user.tier_name : null,
+      expires_in_days: 5,
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+};
+
+const createBulkUserVoucher = async (payload = {}) => {
+  const AppError = require("../utils/AppError");
+  const discountAmount = Math.floor(Number(payload.discount_amount || 0));
+  const requestedCode = String(payload.code || "").trim().toUpperCase();
+
+  if (!discountAmount || discountAmount < 1000) {
+    throw new AppError("Giá trị voucher phải từ 1.000đ trở lên.", 400);
+  }
+
+  await ensureAdminVoucherSchema();
+  await notificationService.ensureNotificationTables();
+
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const [eligibleUsers] = await connection.execute(
+      `
+      SELECT u.id, u.full_name, u.email
+      FROM users u
+      WHERE u.status = 'ACTIVE'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM user_roles ur
+          JOIN roles r ON r.id = ur.role_id
+          WHERE ur.user_id = u.id
+            AND r.name = 'ADMIN'
+        )
+      ORDER BY u.id ASC
+      FOR UPDATE
+      `
+    );
+
+    if (eligibleUsers.length === 0) {
+      throw new AppError("Không có tài khoản hợp lệ để gửi voucher.", 400);
+    }
+
+    let code = /^[A-Z0-9]{6,30}$/.test(requestedCode) ? requestedCode : generateAdminVoucherCode();
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const [existing] = await connection.execute(
+        "SELECT id FROM promotions WHERE code = ? LIMIT 1",
+        [code]
+      );
+      if (!existing[0]) break;
+      code = generateAdminVoucherCode();
+    }
+
+    const [duplicateRows] = await connection.execute(
+      "SELECT id FROM promotions WHERE code = ? LIMIT 1",
+      [code]
+    );
+    if (duplicateRows[0]) {
+      throw new AppError("Không tạo được mã voucher, vui lòng thử lại.", 500);
+    }
+
+    const [promotionResult] = await connection.execute(
+      `
+      INSERT INTO promotions(code, name, discount_type, discount_value, min_amount, expire_date, is_active)
+      VALUES (?, 'Voucher chung CINEMAX', 'FIXED', ?, 0, DATE_ADD(CURDATE(), INTERVAL 5 DAY), TRUE)
+      `,
+      [code, discountAmount]
+    );
+
+    for (const user of eligibleUsers) {
+      const [voucherResult] = await connection.execute(
+        `
+        INSERT INTO user_vouchers
+          (user_id, promotion_id, code, discount_amount, points_cost, expires_at, source, target_tier_id)
+        VALUES (?, ?, ?, ?, 0, DATE_ADD(NOW(), INTERVAL 5 DAY), 'ADMIN_GIFT', NULL)
+        `,
+        [user.id, promotionResult.insertId, code, discountAmount]
+      );
+
+      await notificationService.createNotification(
+        {
+          user_id: user.id,
+          title: "Bạn nhận được voucher chung",
+          message: `CINEMAX gửi bạn voucher ${code} trị giá ${discountAmount.toLocaleString("vi-VN")}đ. Mã có hạn 5 ngày và chỉ dùng 1 lần.`,
+          type: "VOUCHER",
+          payload: {
+            voucher_id: voucherResult.insertId,
+            code,
+            discount_amount: discountAmount,
+            scope: "GENERAL",
+            expires_in_days: 5,
+          },
+        },
+        connection
+      );
+    }
+
+    await connection.commit();
+
+    return {
+      code,
+      discount_amount: discountAmount,
+      sent_count: eligibleUsers.length,
+      expires_in_days: 5,
+    };
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 };
 
 const getAdminFoods = async () => {
@@ -809,6 +1157,8 @@ module.exports = {
   updateUserStatus,
   deleteUser,
   getUserDetail,
+  createUserVoucher,
+  createBulkUserVoucher,
   getAdminFoods,
   createAdminFood,
   updateAdminFood,

@@ -252,6 +252,7 @@ const createBooking = async ({
       const promotionResult = await promotionService.applyPromotionCode({
         code: normalizedPromotionCode,
         total_amount: ticketTotal + foodTotal,
+        userId,
       });
       const promotionDiscount = Math.round(Number(promotionResult.discount_amount || 0));
       totalAmount = Math.max(totalAmount - promotionDiscount, 0);

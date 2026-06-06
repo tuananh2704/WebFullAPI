@@ -10,6 +10,7 @@ const promotionRoutes = require("./promotionRoutes");
 const adminRoutes = require("./adminRoutes");
 const cinemaRoutes = require("./cinemaRoutes");
 const membershipRoutes = require("./membershipRoutes");
+const notificationRoutes = require("./notificationRoutes");
 const { successResponse } = require("../utils/apiResponse");
 
 const router = express.Router();
@@ -98,5 +99,6 @@ router.use("/promotions", promotionRoutes);
 router.use("/admin", adminRoutes);
 router.use("/cinemas", cinemaRoutes);
 router.use("/membership", membershipRoutes);
+router.use("/notifications", notificationRoutes);
 
 module.exports = router;

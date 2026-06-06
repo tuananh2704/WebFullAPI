@@ -7,6 +7,7 @@ import BookingHistoryPage from "../pages/Bookings/BookingHistoryPage";
 import Home from "../pages/Home/Home";
 import MovieDetailPage from "../pages/Movies/MovieDetailPage";
 import MoviesPage from "../pages/Movies/MoviesPage";
+import TopMoviesPage from "../pages/Movies/TopMoviesPage";
 import ProfilePage from "../pages/Profile/ProfilePage";
 import CinemaListPage from "../pages/Cinemas/CinemaListPage";
 import CinemaDetailPage from "../pages/Cinemas/CinemaDetailPage";
@@ -19,6 +20,7 @@ const AppRoutes = () => {
         <Route path="/" element={<MainLayout />}>
           <Route index element={<Home />} />
           <Route path="auth" element={<AuthPage />} />
+          <Route path="top-movies" element={<TopMoviesPage />} />
           <Route path="movies" element={<MoviesPage />} />
           <Route path="movies/:id" element={<MovieDetailPage />} />
           <Route path="cinemas" element={<CinemaListPage />} />

@@ -3,7 +3,9 @@ const AppError = require("../utils/AppError");
 
 const movieSelect = `
   SELECT
-    m.id, m.title, m.description, m.director, m.duration, m.release_date, m.poster_url,
+    m.id, m.title, m.description, m.director, m.duration,
+    DATE_FORMAT(m.release_date, '%Y-%m-%d') AS release_date,
+    m.poster_url,
     m.trailer_url, m.language, m.age_rating, m.rating, m.total_ratings, m.status,
     (
       SELECT COUNT(*)
@@ -23,7 +25,7 @@ const normalizeMovie = (movie) => ({
 });
 
 const VALID_SORT = {
-  rating_desc: "m.rating DESC, m.id DESC",
+  rating_desc: "CAST(COALESCE(m.rating, 0) AS DECIMAL(4,1)) DESC, m.id DESC",
   release_desc: "m.release_date DESC, m.id DESC",
   title_asc: "m.title ASC",
 };
@@ -229,7 +231,7 @@ const getTrailerMovies = async () => {
       m.trailer_url,
       m.poster_url,
       COALESCE(MIN(g.name), "Cinema") AS genre,
-      m.release_date
+      DATE_FORMAT(m.release_date, '%Y-%m-%d') AS release_date
     FROM movies m
     LEFT JOIN movie_genres mg ON mg.movie_id = m.id
     LEFT JOIN genres g ON g.id = mg.genre_id

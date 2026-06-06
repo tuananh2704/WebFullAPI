@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import {
   BarChart3,
+  Bell,
   Clapperboard,
   Crown,
   Film,
@@ -16,6 +17,12 @@ import {
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { getCurrentUser, hasAdminAccess, logout } from "../services/authService";
 import { getMyMembership } from "../services/membershipService";
+import {
+  getNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  type UserNotification,
+} from "../services/notificationService";
 import type { ApiMembershipInfo, ApiUser } from "../types/api";
 
 const getLastName = (fullName: string) => {
@@ -30,6 +37,8 @@ const MainLayout = () => {
   const location = useLocation();
   const [user, setUser] = useState<ApiUser | null>(getCurrentUser());
   const [membership, setMembership] = useState<ApiMembershipInfo | null>(null);
+  const [notifications, setNotifications] = useState<UserNotification[]>([]);
+  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const isAdminUser = hasAdminAccess(user);
   const userId = user?.id;
 
@@ -82,10 +91,68 @@ const MainLayout = () => {
     };
   }, [userId, isAdminUser]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!userId || isAdminUser) {
+      setNotifications([]);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    const fetchNotifications = () => {
+      getNotifications()
+        .then((items) => {
+          if (isMounted) {
+            setNotifications(items);
+          }
+        })
+        .catch(() => {
+          if (isMounted) {
+            setNotifications([]);
+          }
+        });
+    };
+
+    fetchNotifications();
+    const interval = window.setInterval(fetchNotifications, 7000);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(interval);
+    };
+  }, [userId, isAdminUser]);
+
   const handleLogout = () => {
     logout();
     setUser(null);
     navigate("/");
+  };
+
+  const unreadCount = notifications.filter((item) => !Boolean(item.is_read)).length;
+
+  const handleOpenNotification = async () => {
+    setIsNotificationOpen((current) => !current);
+    if (unreadCount > 0) {
+      await markAllNotificationsRead().catch(() => {});
+      setNotifications((current) => current.map((item) => ({ ...item, is_read: true })));
+    }
+  };
+
+  const handleNotificationClick = async (item: UserNotification) => {
+    if (!Boolean(item.is_read)) {
+      await markNotificationRead(item.id).catch(() => {});
+      setNotifications((current) =>
+        current.map((notification) =>
+          notification.id === item.id ? { ...notification, is_read: true } : notification
+        )
+      );
+    }
+    if (item.type === "VOUCHER") {
+      navigate("/membership");
+      setIsNotificationOpen(false);
+    }
   };
 
   return (
@@ -108,10 +175,10 @@ const MainLayout = () => {
             ) : (
               <>
                 <NavLink to="/">Trang chủ</NavLink>
+                <NavLink to="/top-movies">Top phim</NavLink>
                 <NavLink to="/movies">Phim</NavLink>
                 <NavLink to="/cinemas">Rạp</NavLink>
                 <NavLink to="/bookings">Booking</NavLink>
-                {user && <NavLink to="/membership">VIP</NavLink>}
               </>
             )}
           </nav>
@@ -140,6 +207,57 @@ const MainLayout = () => {
                       <small>{formatPoints(membership.points_available)} điểm</small>
                     </span>
                   </NavLink>
+                )}
+                {!isAdminUser && (
+                  <div className="user-notification-wrap">
+                    <button
+                      className="logout-btn user-bell-btn"
+                      type="button"
+                      onClick={handleOpenNotification}
+                      title="Thông báo"
+                      aria-label="Thông báo"
+                    >
+                      <Bell size={19} />
+                      {unreadCount > 0 && (
+                        <span className="user-notification-badge">
+                          {unreadCount > 99 ? "99+" : unreadCount}
+                        </span>
+                      )}
+                    </button>
+
+                    {isNotificationOpen && (
+                      <div className="user-notification-panel">
+                        <div className="user-notification-header">
+                          <strong>Thông báo</strong>
+                          <span>{notifications.length} tin gần đây</span>
+                        </div>
+
+                        <div className="user-notification-list">
+                          {notifications.length > 0 ? (
+                            notifications.map((item) => (
+                              <button
+                                key={item.id}
+                                type="button"
+                                className={`user-notification-item ${
+                                  Boolean(item.is_read) ? "" : "unread"
+                                }`}
+                                onClick={() => handleNotificationClick(item)}
+                              >
+                                <span className="user-notification-dot" />
+                                <div>
+                                  <strong>{item.title}</strong>
+                                  <p>{item.message}</p>
+                                  {item.payload?.code && <small>Mã: {item.payload.code}</small>}
+                                </div>
+                              </button>
+                            ))
+                          ) : (
+                            <div className="user-notification-empty">Chưa có thông báo.</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
                 <button
                   className="logout-btn"
