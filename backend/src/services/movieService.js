@@ -230,7 +230,7 @@ const getTrailerMovies = async () => {
       m.title,
       m.trailer_url,
       m.poster_url,
-      COALESCE(MIN(g.name), "Cinema") AS genre,
+      COALESCE(MIN(g.name), 'Cinema') AS genre,
       DATE_FORMAT(m.release_date, '%Y-%m-%d') AS release_date
     FROM movies m
     LEFT JOIN movie_genres mg ON mg.movie_id = m.id
