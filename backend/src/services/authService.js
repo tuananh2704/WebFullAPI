@@ -1,4 +1,4 @@
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const pool = require("../configs/db");
 const AppError = require("../utils/AppError");
 const { signToken } = require("../utils/jwt");
