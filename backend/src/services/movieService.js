@@ -235,9 +235,9 @@ const getTrailerMovies = async () => {
     FROM movies m
     LEFT JOIN movie_genres mg ON mg.movie_id = m.id
     LEFT JOIN genres g ON g.id = mg.genre_id
-    WHERE m.status = "NOW_SHOWING"
+    WHERE m.status = 'NOW_SHOWING'
       AND m.trailer_url IS NOT NULL
-      AND TRIM(m.trailer_url) <> ""
+      AND TRIM(m.trailer_url) <> ''
     GROUP BY m.id
     ORDER BY
       CASE
