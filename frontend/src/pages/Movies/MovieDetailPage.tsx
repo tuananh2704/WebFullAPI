@@ -348,43 +348,49 @@ const MovieDetailPage = () => {
   const currentShowtimes =
     showtimesByDate.find((g) => g.date === selectedDate)?.showtimes ?? [];
 
-  const cinemaTotalSlotMap = useMemo(() => {
-    const slotMap = new Map<number, number>();
+  const cinemaRoomCountMap = useMemo(() => {
+    const roomMap = new Map<number, Set<number>>();
 
     for (const showtime of movieShowtimes) {
-      if (showtime.status !== "OPEN" || !showtime.cinema_id) {
+      if (showtime.status !== "OPEN" || !showtime.cinema_id || !showtime.room_id) {
         continue;
       }
 
-      slotMap.set(showtime.cinema_id, (slotMap.get(showtime.cinema_id) || 0) + 1);
+      const cinemaRooms = roomMap.get(showtime.cinema_id) || new Set<number>();
+      cinemaRooms.add(showtime.room_id);
+      roomMap.set(showtime.cinema_id, cinemaRooms);
     }
 
-    return slotMap;
+    const roomCountMap = new Map<number, number>();
+    roomMap.forEach((roomIds, cinemaId) => {
+      roomCountMap.set(cinemaId, roomIds.size);
+    });
+    return roomCountMap;
   }, [movieShowtimes]);
 
   const cinemaOptions = useMemo(() => {
     return [...cinemas]
       .sort((a, b) => {
-        const aSlots = cinemaTotalSlotMap.get(a.id) || 0;
-        const bSlots = cinemaTotalSlotMap.get(b.id) || 0;
+        const aRooms = cinemaRoomCountMap.get(a.id) || 0;
+        const bRooms = cinemaRoomCountMap.get(b.id) || 0;
 
-        if (bSlots !== aSlots) {
-          return bSlots - aSlots;
+        if (bRooms !== aRooms) {
+          return bRooms - aRooms;
         }
 
         return a.name.localeCompare(b.name, "vi");
       })
       .map((cinema) => {
-        const slotCount = cinemaTotalSlotMap.get(cinema.id) || 0;
+        const roomCount = cinemaRoomCountMap.get(cinema.id) || 0;
         return {
           value: cinema.id,
           label: `${cinema.name} (${cinema.city})${
-            slotCount > 0 ? ` (${slotCount} slot còn)` : " (hết slot)"
+            roomCount > 0 ? ` (${roomCount} phòng có suất)` : " (hết phòng)"
           }`,
-          disabled: slotCount === 0,
+          disabled: roomCount === 0,
         };
       });
-  }, [cinemas, cinemaTotalSlotMap]);
+  }, [cinemas, cinemaRoomCountMap]);
 
   const selectedCinemaShowtimeDateSet = useMemo(() => {
     if (!selectedCinemaId) {
