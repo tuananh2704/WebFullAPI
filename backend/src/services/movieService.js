@@ -30,6 +30,52 @@ const VALID_SORT = {
   title_asc: "m.title ASC",
 };
 
+const normalizeGenreNames = (genres) => {
+  if (!Array.isArray(genres)) {
+    return [];
+  }
+
+  return [...new Set(genres.map((genre) => String(genre || "").trim()).filter(Boolean))];
+};
+
+const syncMovieGenres = async (connection, movieId, genres, requireGenre = false) => {
+  const genreNames = normalizeGenreNames(genres);
+
+  if (requireGenre && genreNames.length === 0) {
+    throw new AppError("Vui lòng chọn ít nhất 1 thể loại phim.", 400);
+  }
+
+  if (!requireGenre && !Array.isArray(genres)) {
+    return;
+  }
+
+  const placeholders = genreNames.map(() => "?").join(",");
+  const [genreRows] =
+    genreNames.length > 0
+      ? await connection.execute(
+          `SELECT id, name FROM genres WHERE name IN (${placeholders})`,
+          genreNames
+        )
+      : [[]];
+
+  if (genreRows.length !== genreNames.length) {
+    const foundGenres = new Set(genreRows.map((genre) => genre.name));
+    const missingGenres = genreNames.filter((genre) => !foundGenres.has(genre));
+    throw new AppError(`Thể loại phim không hợp lệ: ${missingGenres.join(", ")}`, 400);
+  }
+
+  await connection.execute("DELETE FROM movie_genres WHERE movie_id = ?", [movieId]);
+
+  if (genreRows.length > 0) {
+    const valuesSql = genreRows.map(() => "(?, ?)").join(",");
+    const params = genreRows.flatMap((genre) => [movieId, genre.id]);
+    await connection.execute(
+      `INSERT INTO movie_genres(movie_id, genre_id) VALUES ${valuesSql}`,
+      params
+    );
+  }
+};
+
 const getMovies = async ({
   page,
   limit,
@@ -156,65 +202,93 @@ const getMovieById = async (movieId) => {
 };
 
 const createMovie = async (movie) => {
-  const [result] = await pool.execute(
-    `
-    INSERT INTO movies(title, description, director, duration, release_date, poster_url, trailer_url, language, age_rating, rating, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    [
-      movie.title,
-      movie.description || null,
-      movie.director || null,
-      movie.duration || null,
-      movie.release_date || null,
-      movie.poster_url || null,
-      movie.trailer_url || null,
-      movie.language || null,
-      movie.age_rating || "T13",
-      movie.rating || null,
-      movie.status || "NOW_SHOWING",
-    ]
-  );
+  const connection = await pool.getConnection();
 
-  return getMovieById(result.insertId);
+  try {
+    await connection.beginTransaction();
+
+    const [result] = await connection.execute(
+      `
+      INSERT INTO movies(title, description, director, duration, release_date, poster_url, trailer_url, language, age_rating, rating, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        movie.title,
+        movie.description || null,
+        movie.director || null,
+        movie.duration || null,
+        movie.release_date || null,
+        movie.poster_url || null,
+        movie.trailer_url || null,
+        movie.language || null,
+        movie.age_rating || "T13",
+        movie.rating || null,
+        movie.status || "NOW_SHOWING",
+      ]
+    );
+
+    await syncMovieGenres(connection, result.insertId, movie.genres, true);
+    await connection.commit();
+
+    return getMovieById(result.insertId);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 };
 
 const updateMovie = async (movieId, movie) => {
   await getMovieById(movieId);
 
-  await pool.execute(
-    `
-    UPDATE movies
-    SET title = COALESCE(?, title),
-        description = COALESCE(?, description),
-        director = COALESCE(?, director),
-        duration = COALESCE(?, duration),
-        release_date = COALESCE(?, release_date),
-        poster_url = COALESCE(?, poster_url),
-        trailer_url = COALESCE(?, trailer_url),
-        language = COALESCE(?, language),
-        age_rating = COALESCE(?, age_rating),
-        rating = COALESCE(?, rating),
-        status = COALESCE(?, status)
-    WHERE id = ?
-    `,
-    [
-      movie.title || null,
-      movie.description || null,
-      movie.director || null,
-      movie.duration || null,
-      movie.release_date || null,
-      movie.poster_url || null,
-      movie.trailer_url || null,
-      movie.language || null,
-      movie.age_rating || null,
-      movie.rating || null,
-      movie.status || null,
-      movieId,
-    ]
-  );
+  const connection = await pool.getConnection();
 
-  return getMovieById(movieId);
+  try {
+    await connection.beginTransaction();
+
+    await connection.execute(
+      `
+      UPDATE movies
+      SET title = COALESCE(?, title),
+          description = COALESCE(?, description),
+          director = COALESCE(?, director),
+          duration = COALESCE(?, duration),
+          release_date = COALESCE(?, release_date),
+          poster_url = COALESCE(?, poster_url),
+          trailer_url = COALESCE(?, trailer_url),
+          language = COALESCE(?, language),
+          age_rating = COALESCE(?, age_rating),
+          rating = COALESCE(?, rating),
+          status = COALESCE(?, status)
+      WHERE id = ?
+      `,
+      [
+        movie.title || null,
+        movie.description || null,
+        movie.director || null,
+        movie.duration || null,
+        movie.release_date || null,
+        movie.poster_url || null,
+        movie.trailer_url || null,
+        movie.language || null,
+        movie.age_rating || null,
+        movie.rating || null,
+        movie.status || null,
+        movieId,
+      ]
+    );
+
+    await syncMovieGenres(connection, movieId, movie.genres, true);
+    await connection.commit();
+
+    return getMovieById(movieId);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
 };
 
 const deleteMovie = async (movieId) => {

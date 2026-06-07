@@ -117,6 +117,7 @@ const emptyMovieForm = {
   age_rating: "T13",
   rating: "8.0",
   status: "NOW_SHOWING",
+  genres: [] as string[],
 };
 
 const emptyShowtimeForm = {
@@ -502,22 +503,67 @@ const AdminPage = () => {
   const handleSubmitMovie = async (event: FormEvent) => {
     event.preventDefault();
     try {
+      const requiredFields = [
+        movieForm.title,
+        movieForm.description,
+        movieForm.director,
+        movieForm.duration,
+        movieForm.release_date,
+        movieForm.poster_url,
+        movieForm.trailer_url,
+        movieForm.language,
+        movieForm.age_rating,
+        movieForm.rating,
+        movieForm.status,
+      ];
+      const ratingValue = Number(movieForm.rating);
+      const durationValue = Number(movieForm.duration);
+
+      if (
+        requiredFields.some((value) => !String(value ?? "").trim()) ||
+        !Array.isArray(movieForm.genres) ||
+        movieForm.genres.length === 0
+      ) {
+        notification.warning({
+          message: "Thiếu thông tin phim",
+          description: "Vui lòng điền đủ tất cả các ô và chọn ít nhất 1 thể loại phim.",
+        });
+        return;
+      }
+
+      if (!Number.isFinite(durationValue) || durationValue <= 0) {
+        notification.warning({
+          message: "Thời lượng không hợp lệ",
+          description: "Thời lượng phim phải lớn hơn 0 phút.",
+        });
+        return;
+      }
+
+      if (!Number.isFinite(ratingValue) || ratingValue < 0 || ratingValue > 10) {
+        notification.warning({
+          message: "Đánh giá không hợp lệ",
+          description: "Đánh giá phim phải nằm trong khoảng từ 0 đến 10.",
+        });
+        return;
+      }
+
       const payload = {
-        title: movieForm.title,
-        description: movieForm.description,
-        director: movieForm.director,
-        duration: Number(movieForm.duration),
+        title: movieForm.title.trim(),
+        description: movieForm.description.trim(),
+        director: movieForm.director.trim(),
+        duration: durationValue,
         release_date: movieForm.release_date,
-        poster_url: movieForm.poster_url,
-        trailer_url: movieForm.trailer_url,
-        language: movieForm.language,
+        poster_url: movieForm.poster_url.trim(),
+        trailer_url: movieForm.trailer_url.trim(),
+        language: movieForm.language.trim(),
         age_rating: movieForm.age_rating,
-        rating: Number(movieForm.rating),
+        rating: ratingValue,
         status: (movieForm.id
           ? movieForm.status
           : movieForm.status === "ENDED"
           ? "NOW_SHOWING"
           : movieForm.status) as ApiMovie["status"],
+        genres: movieForm.genres,
       };
 
       if (movieForm.id) {
@@ -661,6 +707,7 @@ const AdminPage = () => {
       age_rating: movie.age_rating || "T13",
       rating: String(movie.rating || "8.0"),
       status: movie.status,
+      genres: movie.genres || [],
     });
     setActiveTab("movies");
   };

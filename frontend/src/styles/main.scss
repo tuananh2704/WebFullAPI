@@ -6419,6 +6419,51 @@ textarea {
   background: linear-gradient(135deg, rgba(255, 183, 0, 0.14), rgba(255, 255, 255, 0.04));
 }
 
+.admin-movie-genre-field {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-movie-genre-field > span {
+  color: #f1f1f1;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.admin-movie-genre-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.admin-movie-genre-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #dcdcdc;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.admin-movie-genre-option.active {
+  border-color: rgba(237, 27, 36, 0.6);
+  background: rgba(237, 27, 36, 0.16);
+  color: #fff;
+}
+
+.admin-movie-genre-option input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: #ed1b24;
+}
+
 /* User notifications: wider panel with readable full message and code. */
 .user-notification-panel {
   width: min(560px, calc(100vw - 32px));

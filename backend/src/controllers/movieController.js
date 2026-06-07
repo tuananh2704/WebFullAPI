@@ -23,7 +23,20 @@ const getMovieDetail = asyncHandler(async (req, res) => {
 });
 
 const createMovie = asyncHandler(async (req, res) => {
-  requireFields(req.body, ["title"]);
+  requireFields(req.body, [
+    "title",
+    "description",
+    "director",
+    "duration",
+    "release_date",
+    "poster_url",
+    "trailer_url",
+    "language",
+    "age_rating",
+    "rating",
+    "status",
+    "genres",
+  ]);
   const movie = await movieService.createMovie(req.body);
   return successResponse(res, "Create movie successfully", movie, 201);
 });

@@ -2,6 +2,18 @@ import React, { FormEvent, useEffect, useMemo, useState } from "react";
 import { Edit3, Plus, Trash2 } from "lucide-react";
 import type { ApiMovie } from "../../../types/api";
 
+const MOVIE_GENRES = [
+  "Action",
+  "Comedy",
+  "Horror",
+  "Sci-Fi",
+  "Animation",
+  "Drama",
+  "Adventure",
+  "Romance",
+  "Thriller",
+];
+
 interface AdminMoviesProps {
   movies: ApiMovie[];
   movieForm: any;
@@ -18,7 +30,6 @@ const AdminMovies: React.FC<AdminMoviesProps> = ({
   setMovieForm,
   handleSubmitMovie,
   editMovie,
-  loadAdminData,
   handleDeleteMovie,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -31,8 +42,7 @@ const AdminMovies: React.FC<AdminMoviesProps> = ({
       movies.filter((movie) => {
         const title = movie.title?.toLowerCase() || "";
         const matchesSearch = title.includes(searchTerm.toLowerCase());
-        const matchesStatus =
-          statusFilter === "ALL" || movie.status === statusFilter;
+        const matchesStatus = statusFilter === "ALL" || movie.status === statusFilter;
         return matchesSearch && matchesStatus;
       }),
     [movies, searchTerm, statusFilter]
@@ -45,10 +55,17 @@ const AdminMovies: React.FC<AdminMoviesProps> = ({
   }, [searchTerm, statusFilter]);
 
   const currentMovies = useMemo(
-    () =>
-      filteredMovies.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    () => filteredMovies.slice((currentPage - 1) * pageSize, currentPage * pageSize),
     [filteredMovies, currentPage]
   );
+
+  const toggleGenre = (genre: string) => {
+    const currentGenres = Array.isArray(movieForm.genres) ? movieForm.genres : [];
+    const nextGenres = currentGenres.includes(genre)
+      ? currentGenres.filter((item: string) => item !== genre)
+      : [...currentGenres, genre];
+    setMovieForm({ ...movieForm, genres: nextGenres });
+  };
 
   return (
     <div className="admin-workspace">
@@ -63,12 +80,14 @@ const AdminMovies: React.FC<AdminMoviesProps> = ({
         />
 
         <textarea
+          required
           placeholder="Mô tả"
           value={movieForm.description}
           onChange={(e) => setMovieForm({ ...movieForm, description: e.target.value })}
         />
 
         <input
+          required
           placeholder="Đạo diễn"
           value={movieForm.director}
           onChange={(e) => setMovieForm({ ...movieForm, director: e.target.value })}
@@ -84,30 +103,35 @@ const AdminMovies: React.FC<AdminMoviesProps> = ({
         />
 
         <input
+          required
           type="date"
           value={movieForm.release_date}
           onChange={(e) => setMovieForm({ ...movieForm, release_date: e.target.value })}
         />
 
         <input
+          required
           placeholder="Poster URL"
           value={movieForm.poster_url}
           onChange={(e) => setMovieForm({ ...movieForm, poster_url: e.target.value })}
         />
 
         <input
+          required
           placeholder="Trailer URL"
           value={movieForm.trailer_url}
           onChange={(e) => setMovieForm({ ...movieForm, trailer_url: e.target.value })}
         />
 
         <input
+          required
           placeholder="Ngôn ngữ"
           value={movieForm.language}
           onChange={(e) => setMovieForm({ ...movieForm, language: e.target.value })}
         />
 
         <select
+          required
           value={movieForm.age_rating}
           onChange={(e) => setMovieForm({ ...movieForm, age_rating: e.target.value })}
         >
@@ -119,6 +143,7 @@ const AdminMovies: React.FC<AdminMoviesProps> = ({
         </select>
 
         <input
+          required
           type="number"
           min="0"
           max="10"
@@ -129,6 +154,7 @@ const AdminMovies: React.FC<AdminMoviesProps> = ({
         />
 
         <select
+          required
           value={movieForm.status}
           onChange={(e) => setMovieForm({ ...movieForm, status: e.target.value })}
         >
@@ -136,6 +162,27 @@ const AdminMovies: React.FC<AdminMoviesProps> = ({
           <option value="COMING_SOON">Sắp chiếu</option>
           {movieForm.id && <option value="ENDED">Ngừng chiếu</option>}
         </select>
+
+        <div className="admin-movie-genre-field">
+          <span>Thể loại phim *</span>
+          <div className="admin-movie-genre-grid">
+            {MOVIE_GENRES.map((genre) => (
+              <label
+                key={genre}
+                className={`admin-movie-genre-option ${
+                  movieForm.genres?.includes(genre) ? "active" : ""
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={movieForm.genres?.includes(genre) || false}
+                  onChange={() => toggleGenre(genre)}
+                />
+                {genre}
+              </label>
+            ))}
+          </div>
+        </div>
 
         <button className="primary-btn form-submit" type="submit">
           <Plus size={18} />
@@ -162,10 +209,7 @@ const AdminMovies: React.FC<AdminMoviesProps> = ({
             onChange={(e) => setSearchTerm(e.target.value)}
           />
 
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
-          >
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)}>
             <option value="ALL">Tất cả</option>
             <option value="NOW_SHOWING">Đang chiếu</option>
             <option value="COMING_SOON">Sắp chiếu</option>
@@ -229,7 +273,7 @@ const AdminMovies: React.FC<AdminMoviesProps> = ({
               disabled={currentPage <= 1}
               onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
             >
-              Prev
+              Trước
             </button>
             <button
               className="secondary-btn compact"
@@ -237,7 +281,7 @@ const AdminMovies: React.FC<AdminMoviesProps> = ({
               disabled={currentPage >= totalPages}
               onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
             >
-              Next
+              Sau
             </button>
           </div>
         </div>
